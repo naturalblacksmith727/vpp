@@ -36,6 +36,7 @@ CREATE TABLE relay_status (
     FOREIGN KEY (relay_id) REFERENCES relay(relay_id)
 );
 
+
 -- 3. bidding_log: LLM이 생성한 입찰 제안 정보
 CREATE TABLE bidding_log (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -132,7 +133,6 @@ INSERT INTO bidding_log (bid_time, bid_id, entity_id, bid_quantity_kwh, bid_pric
 ('2025-07-21 11:00:00', 2, 2, 60, 124, '풍속 증가로 인한 생산 증가 예상'),
 ('2025-07-21 11:00:00', 2, 3, 70, 127, 'SOC 안정적, 방전 가능');
 
-
 -- bidding_result 더미 데이터
 INSERT INTO bidding_result (bid_id, entity_id, quantity_kwh, bid_price, result) VALUES
 (1, 1, 95, 118, 'accepted'),
@@ -155,7 +155,6 @@ INSERT INTO smp (smp_time, price_krw) VALUES
 ('2025-07-21 10:00:00', 126.0),
 ('2025-07-21 11:00:00', 127.8);
 
-
 -- profit_log 더미 데이터
 INSERT INTO profit_log (timestamp, entity_id, unit_price, revenue_krw) VALUES
 ('2025-07-21 10:00:00', 1, 124.5, 1245.0),
@@ -163,5 +162,3 @@ INSERT INTO profit_log (timestamp, entity_id, unit_price, revenue_krw) VALUES
 ('2025-07-21 10:00:00', 3, 123.0, 984.0),
 ('2025-07-21 11:00:00', 1, 126.5, 1138.5),
 ('2025-07-21 11:00:00', 2, 127.0, 762.0);
-
-
