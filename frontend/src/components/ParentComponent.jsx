@@ -1,5 +1,6 @@
 import ChatBot from "./ChatBot";
 import Graphs from "./Graphs";
+import RevenueDashboard from "./RevenueDashboard";
 
 function ParentComponent() {
   return (
@@ -12,9 +13,8 @@ function ParentComponent() {
       <div className="flex fel-col mb-12 pt-12">
         <ChatBot />
       </div>
-      <div>
-        <Graphs />
-      </div>
+      <RevenueDashboard />
+      <Graphs />
     </div>
   );
 }

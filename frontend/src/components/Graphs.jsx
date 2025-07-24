@@ -91,9 +91,9 @@ function Graphs() {
   ];
 
   return (
-    <div className="w-full px-4">
+    <div className="w-full px-4 border border-gray-300 rounded-lg">
       <h2 className="text-4xl font-bold mt-11 mb-11 my-11 ">
-        실시간 전력량 그래프
+        실시간 발전 현황 그래프
       </h2>
       <div className="w-full max-w-screen-xl grid grid-cols-3 gap-6 ">
         <div>

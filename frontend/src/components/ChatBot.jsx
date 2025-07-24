@@ -104,13 +104,13 @@ function ChatBot() {
           {messages.map((m, i) => (
             <div
               key={i}
-              className={`my-2 flex ${
+              className={`my-2 flex  ${
                 m.sender === "user" ? "justify-end" : "justify-start"
               }`}
             >
-              <div className="flex items-end max-w-[80%]">
+              <div className="flex items-end max-w-full">
                 <span
-                  className={`inline-block px-4 py-2 rounded-xl whitespace-pre-wrap break-words ${
+                  className={`inline-block px-4 py-2 rounded-xl whitespace-pre-wrap break-words max-w-full sm:max-w-[calc(100%-someMargin)] ${
                     m.sender === "user"
                       ? "bg-blue-500 text-white text-right"
                       : "bg-gray-200 text-black text-left"
