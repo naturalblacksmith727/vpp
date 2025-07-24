@@ -95,7 +95,7 @@ function Graphs() {
       <h2 className="text-4xl font-bold mt-11 mb-11 my-11 ">
         실시간 발전 현황 그래프
       </h2>
-      <div className="w-full px-16 grid grid-cols-3 gap-16 justify-items-center ">
+      <div className="w-full px-16 grid grid-cols-2 gap-16 justify-items-center ">
         <div>
           <h3 className="text-2xl font-bold  mb-4 pl-10">태양광</h3>
           <div className="flex flex-col items-center">

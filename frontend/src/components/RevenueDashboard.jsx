@@ -11,7 +11,6 @@ function RevenueDashboard() {
       <div>
         <div className="flex justify-center gap-6 mb-4">
           <div className="border p-4 rounded shadow-md bg-white">
-            <h3 className="text-2xl font-bold mb-5">총 수익현황</h3>
             <p>총 발전량 : xxx kWh</p>
             <p>총 수익 : x,xxx원</p>
           </div>
