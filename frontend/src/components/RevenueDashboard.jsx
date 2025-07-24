@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from "react";
 
 function RevenueDashboard() {
   return (
-    <div className="fixed right-4 border border-gray-300 p-4 rounded-lg mt-16">
+    <div className="fixed top-20 right-6 border border-gray-300 p-4 rounded-lg  z-50 bg-white shadow-md">
       <h2 className="text-2xl font-bold mt-1 mb-3 my-11 ">
         <p>실시간 수익현황</p>
         <p>(15분간)</p>
