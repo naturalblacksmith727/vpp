@@ -12,8 +12,8 @@ function ParentComponent() {
       </header>
       <div className="flex fel-col mb-12 pt-12">
         <ChatBot />
+        <RevenueDashboard />
       </div>
-      <RevenueDashboard />
       <Graphs />
     </div>
   );
