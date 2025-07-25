@@ -10,11 +10,13 @@ function ParentComponent() {
           가상 발전소(VPP) AI 대화형 전략 어시스턴트
         </h1>
       </header>
-      <div className="pt-[50px] pr-[220px]">
+
+      <div className="pt-[50px] pr-[220px] ">
         <RevenueDashboard />
-        <div className="mb-12 ml-6">
+        <div className="mb-12 ml-6 w-full">
           <ChatBot />
         </div>
+
         <Graphs />
       </div>
     </div>

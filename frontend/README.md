@@ -1,12 +1,23 @@
-# React + Vite
+# VPP AI 대화형 전략 어시스턴트
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+가상 발전소(VPP)의 수익 분석 및 전략 수립을 도와주는 대화형 웹 애플리케이션입니다.
+사용자는 AI 챗봇과 상호작용하며 실시간 발전 데이터 그래프와 실시간 총수익을 시각적으로 확인할 수 있습니다.
 
-Currently, two official plugins are available:
+## 주요 기능
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- ChatGPT 기반 챗봇과 실시간 대화
+- 태양광 / 풍력 / 배터리 발전량 시각화 (Recharts)
+- 실시간 수익 현황 제공
 
-## Expanding the ESLint configuration
+## 기술 스택
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- React (Vite 기반)
+- Tailwind CSS
+- Recharts
+- Axios
+- Vercel (배포)
+- Flask 백엔드와 REST API 통신
+
+## 배포 링크
+
+[https://vpp-cyan.vercel.app](https://vpp-cyan.vercel.app)
