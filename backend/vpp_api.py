@@ -14,19 +14,146 @@ def get_connection():
         cursorclass=pymysql.cursors.DictCursor
     )
 
+
 app = Flask(__name__)
 # 프론트엔드 모든 요청 허용
 CORS(app)
 
 # relay_id 발전소 타입
 RELAY_TYPE = {
-    1:"solar",
-    2:"wind",
-    3:"battery",
-    4:"solar",
-    5:"wind"
+    1: "solar",
+    2: "wind",
+    3: "battery",
+    4: "solar",
+    5: "wind"
 }
 
+# 메모리 저장소
+node_status_storage = []
+
+# 1. 아두이노 → 서버: 상태 전송
+@app.route("/ardu_serv/node_status", methods=["POST"])
+def receive_node_status():
+    try:
+        data = request.get_json()
+
+        required_fields = ["relay_id", "node_timestamp", "power_kw", "soc"]
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    "result": "failed",
+                    "node_timestamp": data.get("node_timestamp"),
+                    "reason": f"Missing required field: {field}"
+                })
+
+        try:
+            datetime.strptime(data["node_timestamp"], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return jsonify({
+                "result": "failed",
+                "node_timestamp": data["node_timestamp"],
+                "reason": "Invalid timestamp format"
+            })
+
+        if not isinstance(data["power_kw"], (float, int)):
+            return jsonify({
+                "result": "failed",
+                "node_timestamp": data["node_timestamp"],
+                "reason": "Invalid type: power_kw must be float"
+            })
+
+        if data["soc"] is not None and not isinstance(data["soc"], (float, int)):
+            return jsonify({
+                "result": "failed",
+                "node_timestamp": data["node_timestamp"],
+                "reason": "Invalid type: soc must be float or null"
+            })
+
+        node_status_storage.append(data)
+
+        # DB 저장
+        conn = get_connection()
+        with conn.cursor() as cursor:
+            sql = """
+            INSERT INTO node_status_log (node_timestamp, relay_id, power_kw, soc)
+            VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(sql, (
+                data["node_timestamp"],
+                data["relay_id"],
+                data["power_kw"],
+                data["soc"]
+            ))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "result": "Success",
+            "node_timestamp": data["node_timestamp"],
+            "reason": None
+        })
+
+    except Exception as e:
+        return jsonify({
+            "result": "failed",
+            "node_timestamp": None,
+            "reason": "Unexpected server error"
+        })
+
+
+# 2. 서버 → 아두이노: 명령 전송
+@app.route("/serv_ardu/command", methods=["GET"])
+def get_all_commands():
+    try:
+        conn = get_connection()
+        with conn.cursor() as cursor:
+            sql = """
+            SELECT 
+                rs.relay_id,
+                rs.status,
+                rs.last_updated,
+                br.result AS reason
+            FROM relay_status rs
+            LEFT JOIN (
+                SELECT bid_id, result
+                FROM bidding_result
+                WHERE id IN (
+                    SELECT MAX(id)
+                    FROM bidding_result
+                    GROUP BY bid_id
+                )
+            ) br ON rs.relay_id = br.bid_id
+            """
+            cursor.execute(sql)
+            results = cursor.fetchall()
+        conn.close()
+
+        commands = []
+        for row in results:
+            commands.append({
+                "relay_id": row["relay_id"],
+                "status": row["status"],
+                "last_updated": row["last_updated"].strftime("%Y-%m-%d %H:%M:%S"),
+                "reason": row.get("reason")  # NULL인 경우도 처리
+            })
+
+        return jsonify({
+            "status": "success",
+            "commands": commands,
+            "fail_reason": None
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "failed",
+            "commands": None,
+            "fail_reason": f"internal server error: {str(e)}"
+        })
+
+
+      
+      
+      
 # 발전소 결과 요청(서버->프론트엔드)
 @app.route('/serv_fr/node_status', methods=['GET'])
 def get_node_result():
@@ -90,7 +217,10 @@ def get_node_result():
             "timestamp": None,
             "fail_reason": "server_error" 
             })
+      
+      
 
+ 
 # 수익 결과 요청(서버->프론트엔드)
 @app.route('/serv_fr/bidding_result', methods=['GET'])
 def get_profit_rusult():
@@ -121,7 +251,7 @@ def get_profit_rusult():
                     "timestamp": None,
                     "fail_reason": "no_data_total_generation_kwh"
                 })
-            
+
             if total_revenue_krw is None:
                 # 데이터가 아예 없을 때 실패 처리
                 return jsonify({
