@@ -32,14 +32,13 @@ function RevenueDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  if (!profitData) {
+    return <p>데이터 로딩 중...</p>;
+  }
   // 총 누적 발전량
   const total_generation_kwh = profitData.data.total_generation_kwh;
   // 총 누적 수익
   const total_revenue_krw = profitData.data.total_revenue_krw;
-
-  if (!profitData) {
-    return <p>데이터 로딩 중...</p>;
-  }
 
   return (
     <div className="fixed top-20 right-6 border border-gray-300 p-4 rounded-lg  z-50 bg-white shadow-md">
@@ -51,12 +50,17 @@ function RevenueDashboard() {
           <div className="border p-4 rounded shadow-md bg-white">
             <p>
               총 발전량 : <br />
-              {total_generation_kwh} kWh
+              {total_generation_kwh !== null &&
+              total_generation_kwh !== undefined
+                ? `${total_generation_kwh} kWh`
+                : "데이터 없음"}
             </p>
             <br />
             <p>
               총 수익 : <br />
-              {total_revenue_krw} 원
+              {total_revenue_krw !== null && total_revenue_krw !== undefined
+                ? `${total_revenue_krw} 원`
+                : "데이터 없음"}
             </p>
           </div>
         </div>
