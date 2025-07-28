@@ -104,16 +104,16 @@ def get_profit_rusult():
             WHERE relay_id IN (1,2,4,5)
             """
             cursor.execute(sql)
-            total_generation_kwh = cursor.fetchone()
+            total_gen = cursor.fetchone()
 
             sql = """
             SELECT ROUND(CAST(SUM(revenue_krw) AS DECIMAL(10,2)), 0) AS total_revenue_krw
             FROM profit_log
             """
             cursor.execute(sql)
-            total_revenue_krw = cursor.fetchone()
+            total_rev = cursor.fetchone()
 
-            if total_generation_kwh is None:
+            if total_gen is None:
                 # 데이터가 아예 없을 때 실패 처리
                 return jsonify({
                     "status": "failed",
@@ -122,7 +122,7 @@ def get_profit_rusult():
                     "fail_reason": "no_data_total_generation_kwh"
                 })
             
-            if total_revenue_krw is None:
+            if total_rev is None:
                 # 데이터가 아예 없을 때 실패 처리
                 return jsonify({
                     "status": "failed",
@@ -134,8 +134,8 @@ def get_profit_rusult():
             return jsonify({
                 "status": "success", 
                 "data": {
-                    "total_revenue_krw" : total_revenue_krw,
-                    "total_generation_kwh" : total_generation_kwh
+                    "total_revenue_krw" : total_rev,
+                    "total_generation_kwh" : total_gen
                     },
                 "fail_reason": None
                 })
@@ -150,4 +150,4 @@ def get_profit_rusult():
             "fail_reason": "server_error" 
             })
     
-app.run(debug=True, host='0.0.0.0', port=5001)
+app.run(debug=True, host='0.0.0.0', port=5000)

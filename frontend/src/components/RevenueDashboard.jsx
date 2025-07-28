@@ -8,9 +8,12 @@ function RevenueDashboard() {
   useEffect(() => {
     const fetchData = () => {
       axios
+        /*
         .get("https://aismartfarm.duckdns.org/api/serv_fr/bidding_result")
+        */
+        .get("gttps://127.0.0.1:5000/api/serv_fr/bidding_result")
         .then((response) => {
-          if (response.data.result === "success") {
+          if (response.data.status === "success") {
             setprofitData(response.data);
           } else {
             setError("데이터를 가져오지 못했습니다.");
@@ -32,9 +35,10 @@ function RevenueDashboard() {
   }, []);
 
   // 총 누적 발전량
-  const total_generation_kwh = profitData.data.total_generation_kwh;
+  const total_generation_kwh =
+    profitData.data.total_generation_kwh.total_generation_kwh;
   // 총 누적 수익
-  const total_revenue_krw = profitData.data.total_revenue_krw;
+  const total_revenue_krw = profitData.data.total_revenue_krw.total_revenue_krw;
 
   if (!profitData) {
     return <p>데이터 로딩 중...</p>;
