@@ -428,6 +428,14 @@ def get_weather():
 # 메모리 저장소
 node_status_storage = []
 
+# 유틸 함수 (실제로는 DB 또는 하드웨어에서 확인해야 함)
+def is_relay_connected(relay_id):
+    return True
+
+def is_entity_active(relay_id):
+    return True
+
+
 # 1. 아두이노 → 서버: 상태 전송
 @app.route("/ardu_serv/node_status", methods=["POST"])
 def receive_node_status():
