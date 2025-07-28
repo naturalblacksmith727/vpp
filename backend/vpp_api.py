@@ -161,9 +161,6 @@ def get_profit_result():
             "fail_reason": "server_error" 
             })
     
-<<<<<<< HEAD
-app.run(debug=True, host='0.0.0.0', port=5001)
-=======
 
 # --------------------------------------------------------------------------------
 # LLM <-> 서버
@@ -581,4 +578,3 @@ if __name__ == "__main__":
     test_db_connection()
     # Flask 앱 실행
     app.run(debug=True, host='0.0.0.0', port=5001)
->>>>>>> 72dd156a14da4cefd84748f2d884b11dee403a30
