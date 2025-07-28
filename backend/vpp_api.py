@@ -134,8 +134,8 @@ def get_profit_rusult():
             return jsonify({
                 "status": "success", 
                 "data": {
-                    total_rev,
-                    total_gen
+                    "total_revenue_krw" : total_rev,
+                    "total_generation_kwh" : total_gen
                     },
                 "fail_reason": None
                 })
