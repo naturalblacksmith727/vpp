@@ -8,10 +8,8 @@ function RevenueDashboard() {
   useEffect(() => {
     const fetchData = () => {
       axios
-        /*
-        .get("https://aismartfarm.duckdns.org/api/serv_fr/bidding_result")
-        */
-        .get("gttps://127.0.0.1:5000/api/serv_fr/bidding_result")
+        .get("https://aivpp.duckdns.org/api/serv_fr/bidding_result")
+        //.get("gttps://127.0.0.1:5000/api/serv_fr/bidding_result")
         .then((response) => {
           if (response.data.status === "success") {
             setprofitData(response.data);
@@ -35,14 +33,14 @@ function RevenueDashboard() {
   }, []);
 
   // 총 누적 발전량
-  const total_generation_kwh =
-    profitData.data.total_generation_kwh.total_generation_kwh;
+  const total_generation_kwh = profitData.data.total_generation_kwh;
   // 총 누적 수익
-  const total_revenue_krw = profitData.data.total_revenue_krw.total_revenue_krw;
+  const total_revenue_krw = profitData.data.total_revenue_krw;
 
   if (!profitData) {
     return <p>데이터 로딩 중...</p>;
   }
+
   return (
     <div className="fixed top-20 right-6 border border-gray-300 p-4 rounded-lg  z-50 bg-white shadow-md">
       <h2 className="text-2xl font-bold mt-1 mb-3 my-11 ">
@@ -51,8 +49,15 @@ function RevenueDashboard() {
       <div>
         <div className="flex justify-center gap-6 mb-4">
           <div className="border p-4 rounded shadow-md bg-white">
-            <p>총 발전량 : {total_generation_kwh}kWh</p>
-            <p>총 수익 : {total_revenue_krw} 원</p>
+            <p>
+              총 발전량 : <br />
+              {total_generation_kwh} kWh
+            </p>
+            <br />
+            <p>
+              총 수익 : <br />
+              {total_revenue_krw} 원
+            </p>
           </div>
         </div>
       </div>
