@@ -206,10 +206,8 @@ def get_bidding_result():
         with conn.cursor() as cursor:
             # 최신 입찰 결과 1건 조회
             sql = """
-            SELECT entity_id, bid_result, unit_price
+            SELECT entity_id, result, bid_price
             FROM bidding_result
-            ORDER BY bid_time DESC
-            LIMIT 1
             """
             cursor.execute(sql)
             result = cursor.fetchone()
@@ -226,8 +224,8 @@ def get_bidding_result():
             "status": "success",
             "bid": {
                 "entity_id": result["entity_id"],
-                "bid_result": result["bid_result"],
-                "unit_price": result["unit_price"]
+                "bid_result": result["result"],
+                "unit_price": result["bid_price"]
             },
             "fail_reason": None
         })
