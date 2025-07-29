@@ -51,6 +51,11 @@ def generate_bid():
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        cursor.execute("SELECT MAX(bid_id) FROM bidding_log")
+        last_bid_id_row = cursor.fetchone()
+        last_bid_id = last_bid_id_row[0] or 0
+        new_bid_id = last_bid_id + 1
+
         for bid in bids:
             for old_key, new_key in KEY_MAPPING.items():
                 if old_key in bid:
@@ -79,7 +84,7 @@ def generate_bid():
                 (bid_time, bid_id, entity_id, bid_quantity_kwh, bid_price_per_kwh, llm_reasoning, recommendation)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (
-                bid_time, bid_id, entity_id,
+                bid_time, new_bid_id, entity_id,
                 bid_quantity_kwh, bid_price_per_kwh,
                 llm_reasoning, recommendation
             ))
