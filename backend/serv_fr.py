@@ -163,7 +163,7 @@ def generate_bid():
         with conn.cursor() as cursor:
             sql = """
             SELECT entity_id, bid_time, bid_price_per_kwh, bid_quantity_kwh, llm_reasoning
-            FROM llm_generated_bids
+            FROM bidding_log
             ORDER BY bid_time DESC
             """
             cursor.execute(sql)
