@@ -4,7 +4,6 @@ import pymysql
 import json
 from flask_cors import CORS
 
-
 def get_connection():
     return pymysql.connect(
         host="database-1.cts2qeeg0ot5.ap-northeast-2.rds.amazonaws.com",
@@ -33,8 +32,6 @@ RELAY_TYPE = {
 node_status_storage = []
 
 # 1. 아두이노 → 서버: 상태 전송
-
-
 @app.route("/ardu_serv/node_status", methods=["POST"])
 def receive_node_status():
     try:
@@ -154,6 +151,9 @@ def get_all_commands():
         })
 
 
+      
+      
+      
 # 발전소 결과 요청(서버->프론트엔드)
 @app.route('/serv_fr/node_status', methods=['GET'])
 def get_node_result():
@@ -187,11 +187,11 @@ def get_node_result():
 
             # 설비별로 데이터 분류
             data = {
-                "solar": [],
-                "wind": [],
-                "battery": []
-            }
-
+                "solar" : [],
+                "wind" : [],
+                "battery" : []
+                }
+            
             for row in rows:
                 equip_type = RELAY_TYPE[row["relay_id"]]
                 if equip_type:
@@ -202,25 +202,26 @@ def get_node_result():
                     })
 
             return jsonify({
-                "status": "success",
+                "status": "success", 
                 "data": data,
                 "timestamp": rows[0]["node_timestamp"].isoformat(),
                 "fail_reason": None
-            })
+                })
 
     # 서버 내부 문제
     except Exception as e:
         print("에러 발생: ", str(e))
-        return jsonify({
-            "status": "failed",
+        return jsonify({ 
+            "status": "failed", 
             "data": None,
             "timestamp": None,
-            "fail_reason": "server_error"
-        })
+            "fail_reason": "server_error" 
+            })
+      
+      
 
+ 
 # 수익 결과 요청(서버->프론트엔드)
-
-
 @app.route('/serv_fr/bidding_result', methods=['GET'])
 def get_profit_rusult():
     try:
@@ -261,23 +262,22 @@ def get_profit_rusult():
                 })
 
             return jsonify({
-                "status": "success",
+                "status": "success", 
                 "data": {
-                    "total_revenue_krw": total_revenue_krw,
-                    "total_generation_kwh": total_generation_kwh
-                },
+                    "total_revenue_krw" : total_revenue_krw,
+                    "total_generation_kwh" : total_generation_kwh
+                    },
                 "fail_reason": None
-            })
+                })
 
     # 서버 내부 문제
     except Exception as e:
         print("에러 발생: ", str(e))
-        return jsonify({
-            "status": "failed",
+        return jsonify({ 
+            "status": "failed", 
             "data": None,
             "timestamp": None,
-            "fail_reason": "server_error"
-        })
-
-
+            "fail_reason": "server_error" 
+            })
+    
 app.run(debug=True, host='0.0.0.0', port=5000)
