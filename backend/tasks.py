@@ -1,5 +1,6 @@
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, timedelta
 import pymysql
 
 def get_connection():
@@ -11,6 +12,17 @@ def get_connection():
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor
     )
+
+# datetime.now()가 15분으로 정확히 찍히지 않을 경우 예방하기 위한 15분단위로 반올림 해주는 함수 
+def round_to_nearest_15min(dt):
+    discard = timedelta(minutes=dt.minute % 15,
+                        seconds=dt.second,
+                        microseconds=dt.microsecond)
+    dt -= discard
+    if discard >= timedelta(minutes=7.5):
+        dt += timedelta(minutes=15)
+    return dt
+
 
 def evaluate_bids():
     print(f"[{datetime.now()}] ⏳ 입찰 평가 시작")
@@ -33,6 +45,8 @@ def evaluate_bids():
             if cursor.fetchone()["cnt"] > 0:
                 print(f"⚠️ 이미 평가된 입찰 batch {latest_bid_id}, 생략")
                 return
+            
+            rounded_time = round_to_nearest_15min(datetime.now())
 
             # 해당 배치의 입찰 정보 가져오기
             cursor.execute("""
@@ -44,10 +58,10 @@ def evaluate_bids():
             cursor.execute("""
                 SELECT price_per_kwh
                 FROM smp_data
-                WHERE smp_time <= %s
+                WHERE smp_time = %s
                 ORDER BY timestamp DESC
                 LIMIT 1
-            """, (datetime.now(),))
+            """, (rounded_time,))
             smp_row = cursor.fetchone()
             if not smp_row:
                 print("❌ SMP 데이터 없음")
@@ -79,6 +93,17 @@ def evaluate_bids():
         conn.close()
 
 
+
+
+#profit_log 계산 
+
+
+
+
+
+
+
+
 # 스케줄러 설정
 def start_scheduler():
     scheduler = BackgroundScheduler(timezone='Asia/Seoul')
@@ -90,7 +115,6 @@ def start_scheduler():
 # 메인 진입점
 if __name__ == "__main__":
     start_scheduler()
-
     # 앱이 종료되지 않도록 유지
     try:
         while True:
