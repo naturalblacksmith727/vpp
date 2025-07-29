@@ -154,17 +154,15 @@ def get_all_commands():
 
 
 # 3. 서버 -> 프론트 : LLM이 생성한 입찰 결과를 프론트로 전달
-
-
 @app.route("/serv_fr/generate_bid", methods=["GET"])
 def generate_bid():
     try:
         conn = get_connection()
-        with conn.cursor() as cursor:
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
-            SELECT entity_id, bid_time, bid_price_per_kwh, bid_quantity_kwh, llm_reasoning
-            FROM bidding_log
-            ORDER BY bid_time DESC
+                SELECT entity_id, bid_time, bid_price_per_kwh, bid_quantity_kwh, llm_reasoning
+                FROM bidding_log
+                ORDER BY bid_time DESC
             """
             cursor.execute(sql)
             bids = cursor.fetchall()
@@ -191,23 +189,24 @@ def generate_bid():
             "bids": result
         })
 
-    except Exception as e:
+    except Exception:
         return jsonify({
-            "fail_reason": "Internal server error during bid generation",
+            "fail_reason": "server_error",
             "bids": None
         })
 
 
-# 4. 서버 -> 프론트
+# 4. 서버 -> 프론트 : 입찰 결과 확인
 @app.route("/serv_fr/bidding_result", methods=["GET"])
 def get_bidding_result():
     try:
         conn = get_connection()
-        with conn.cursor() as cursor:
-            # 최신 입찰 결과 1건 조회
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
-            SELECT entity_id, result, bid_price
-            FROM bidding_result
+                SELECT entity_id, result, bid_price
+                FROM bidding_result
+                ORDER BY bid_time DESC
+                LIMIT 1
             """
             cursor.execute(sql)
             result = cursor.fetchone()
@@ -230,7 +229,7 @@ def get_bidding_result():
             "fail_reason": None
         })
 
-    except Exception as e:
+    except Exception:
         return jsonify({
             "status": "success",
             "bid": None,
