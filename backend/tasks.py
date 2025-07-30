@@ -95,58 +95,57 @@ def evaluate_bids():
 
 
 #수익 계산 
-def calculate_profit():
-    now = datetime.now().replace(microsecond=0)
-    print(f"[{now}] 💰 수익 계산 중...")
+# def calculate_profit():
+#     now = datetime.now().replace(microsecond=0)
+#     print(f"[{now}] 💰 수익 계산 중...")
 
-    try:
-        conn = get_connection()
-        with conn.cursor() as cursor:
-            # 1. 최신 accepted 입찰 전체 조회 (유효한 입찰)
-            cursor.execute("""
-                SELECT br.entity_id, br.bid_price
-                FROM bidding_result br
-                JOIN (
-                    SELECT entity_id, MAX(id) as max_id
-                    FROM bidding_result
-                    WHERE result = 'accepted'
-                    GROUP BY entity_id
-                ) latest ON br.id = latest.max_id
-            """)
-            accepted_bids = cursor.fetchall()
+#     try:
+#         conn = get_connection()
+#         with conn.cursor() as cursor:
+#             # 1. 최신 accepted 입찰 전체 조회 (유효한 입찰)
+#             cursor.execute("""
+#                 SELECT br.entity_id, br.bid_price
+#                 FROM bidding_result br
+#                 JOIN (
+#                     SELECT entity_id, MAX(id) as max_id
+#                     FROM bidding_result
+#                     WHERE result = 'accepted'
+#                     GROUP BY entity_id
+#                 ) latest ON br.id = latest.max_id
+#             """)
+#             accepted_bids = cursor.fetchall()
 
-            for bid in accepted_bids:
-                entity_id = bid["entity_id"]
-                unit_price = bid["bid_price"]
+#             for bid in accepted_bids:
+#                 entity_id = bid["entity_id"]
+#                 unit_price = bid["bid_price"]
 
-                # 2. 발전소 최신 발전량 조회
-                cursor.execute("""
-                    SELECT power_kw
-                    FROM node_status_log
-                    WHERE relay_id = %s
-                    ORDER BY node_timestamp DESC
-                    LIMIT 1
-                """, (entity_id,))
-                power_row = cursor.fetchone()
+#                 # 2. 발전소 최신 발전량 조회
+#                 cursor.execute("""
+#                     SELECT power_kw
+#                     FROM node_status_log
+#                     WHERE relay_id = %s
+#                     ORDER BY node_timestamp DESC
+#                     LIMIT 1
+#                 """, (entity_id,))
+#                 power_row = cursor.fetchone()
 
-                if power_row:
-                    power_kw = power_row["power_kw"]
-                    # 20초 동안 발전량 단위 변환 수익 계산
-                    revenue = round(power_kw * unit_price * (20.0 / 3600), 2)
+#                 if power_row:
+#                     power_kw = power_row["power_kw"]
+#                     # 20초 동안 발전량 단위 변환 수익 계산
+#                     revenue = round(power_kw * unit_price * (20.0 / 3600), 2)
 
-                    # 3. profit_log에 누적 기록 (중복 가능)
-                    cursor.execute("""
-                        INSERT INTO profit_log (timestamp, entity_id, unit_price, revenue_krw)
-                        VALUES (%s, %s, %s, %s)
-                    """, (now, entity_id, unit_price, revenue))
+#                     # 3. profit_log에 누적 기록 (중복 가능)
+#                     cursor.execute("""
+#                         INSERT INTO profit_log (timestamp, entity_id, unit_price, revenue_krw)
+#                         VALUES (%s, %s, %s, %s)
+#                     """, (now, entity_id, unit_price, revenue))
 
-        conn.commit()
-        conn.close()
-        print(f"[{now}] ✅ 수익 저장 완료")
+#         conn.commit()
+#         conn.close()
+#         print(f"[{now}] ✅ 수익 저장 완료")
 
-    except Exception as e:
-        print(f"❌ calculate_profit 오류: {e}")
-
+#     except Exception as e:
+#         print(f"❌ calculate_profit 오류: {e}")
 
 
 
@@ -156,7 +155,7 @@ def calculate_profit():
 def start_scheduler():
     scheduler = BackgroundScheduler(timezone='Asia/Seoul')
     scheduler.add_job(evaluate_bids, 'cron', minute='*/15')  # 매 15분마다 실행
-    scheduler.add_job(calculate_profit, 'interval', seconds=20)    # 20초마다 수익 계산
+    # scheduler.add_job(calculate_profit, 'interval', seconds=20)    # 20초마다 수익 계산
     scheduler.start()
     print("📅 APScheduler 시작됨 (15분 간격)")
 

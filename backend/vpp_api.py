@@ -547,7 +547,7 @@ def get_weather():
 
 
 # 3. Post/generate_bid: 생성한 입찰 제안 bidding_log에 저장 (LLM -> 서버)
-@vpp_blueprint.route('/llm_serv/generate_bid', methods=['POST'])
+@vpp_blueprint.route('/llm_serv/generate_bid', methods=['POST'], endpoint="generate_bid_post")
 def generate_bid():
     try:
         data = request.get_json()
@@ -819,6 +819,10 @@ def receive_node_status():
 @vpp_blueprint.route("/serv_ardu/command", methods=["GET"])
 def get_all_commands():
     try:
+        page = int(request.args.get("page", 1))
+        page_size = 20  # 한 번에 20개씩 전송
+        offset = (page - 1) * page_size
+
         conn = get_connection()
         with conn.cursor() as cursor:
             sql = """
@@ -837,6 +841,7 @@ def get_all_commands():
                     GROUP BY bid_id
                 )
             ) br ON rs.relay_id = br.bid_id
+            LIMIT {page_size} OFFSET {offset}
             """
             cursor.execute(sql)
             results = cursor.fetchall()
