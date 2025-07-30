@@ -42,10 +42,10 @@ def generate_bid():
     try:
         data = request.get_json()
         bid_time = data.get('bid_time')
-        bid_id = data.get('bid_id')
+        # bid_id = data.get('bid_id')
         bids = data.get('bids')
 
-        if not isinstance(bid_time, str) or not isinstance(bid_id, int) or not isinstance(bids, list):
+        if not isinstance(bid_time, str) or not isinstance(bids, list):
             raise ValueError("invalid request format")
 
         conn = get_db_connection()
@@ -53,7 +53,7 @@ def generate_bid():
 
         cursor.execute("SELECT MAX(bid_id) FROM bidding_log")
         last_bid_id_row = cursor.fetchone()
-        last_bid_id = last_bid_id_row[0] or 0
+        last_bid_id = last_bid_id_row.get('MAX(bid_id)') or 0  # 수정됨
         new_bid_id = last_bid_id + 1
 
         for bid in bids:
@@ -99,6 +99,8 @@ def generate_bid():
         print("❌ 데이터 오류:", str(e))
         return jsonify({"result": "Failed", "reason": "empty_bid_list"}), 400
 
+
+    
     except pymysql.err.IntegrityError as e:
         print("❌ IntegrityError:", e)
         return jsonify({"result": "Failed", "reason": f"sql_insert_error: {str(e)}"}), 500
