@@ -7,17 +7,6 @@ import re
 from flask_cors import CORS
 from enum import Enum
 
-#  PUT/fr_serv/bid_edit_fix 에서 사용할 enum 클래스
-class StatusEnum(str, Enum):
-    SUCCESS = "success"
-    FAILED = "failed"
-
-class ActionEnum(str, Enum):
-    EDIT = "edit"
-    CONFIRM = "confirm"
-    TIMEOUT = "timeout"
-
-
 def get_connection():
     conn = pymysql.connect(
         host="database-1.cts2qeeg0ot5.ap-northeast-2.rds.amazonaws.com",
@@ -78,13 +67,23 @@ ENTITY_TYPE = {
     3:"배터리"
 }
 
-# 타임 아웃 체크 함수(한국시간 기준 15분 지났는지 확인)
+#  PUT/fr_serv/bid_edit_fix 에서 사용할 enum 클래스
+class StatusEnum(str, Enum):
+    SUCCESS = "success"
+    FAILED = "failed"
+
+class ActionEnum(str, Enum):
+    EDIT = "edit"
+    CONFIRM = "confirm"
+    TIMEOUT = "timeout"
+
+# 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
 def is_timeout():
     korea = pytz.timezone("Asia/Seoul")
     now = datetime.now(korea)
     minute = (now.minute // 15) * 15
     start_time = now.replace(minute=minute, second=0, microsecond=0)
-    timeout_time = start_time + timedelta(minutes=15)
+    timeout_time = start_time + timedelta(minutes=14)
 
     return now > timeout_time
 
@@ -233,7 +232,7 @@ def get_profit_result():
 
 # 3. GET/generate_bid: 생성한 입찰 보여주기 (서버 -> 프론트)
 @vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"])
-def generate_bid():
+def get_generate_bid():
     try:
         conn = get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
@@ -317,7 +316,8 @@ def get_bidding_result():
 @vpp_blueprint.route('/fr_serv/bid_edit_fix', methods=['PUT'])
 def put_edit_fix():
     data = request.get_json(silent=True) or {}
-    user_input = data.get("user_input","").strip()
+    action = data.get("action", "").strip().lower()
+    bid = data.get("bid", None)
 
     # ---------------------
     # [1] 타임아웃 처리
@@ -326,79 +326,69 @@ def put_edit_fix():
         return jsonify({
             "status": StatusEnum.FAILED,
             "action": ActionEnum.TIMEOUT,
-            "fail_reason": "timeout"
+            "fail_reason": "Timeout processing failed: Could not write default bid"
         })
     
     # ---------------------
     # [2] confirm (수정 없이 진행)
     # ---------------------
-    elif "수정없이 진행" in user_input:
-        return jsonify({
-            "status": StatusEnum.SUCCESS,
-            "action": ActionEnum.CONFIRM,
-            "fail_reason": None
-        })
+    elif action == "confirm":
+        try:
+            conn = get_connection()
+            with conn.cursor() as cursor:
+
+                # 마지막 입찰 데이터 확인
+                cursor.execute("""
+                    SELECT COUNT(*) AS count
+                    FROM bidding_log
+                    WHERE entity_id IN (1,2,3)
+                """)
+                result = cursor.fetchone()
+                if result["count"] == 0:
+                    return jsonify({
+                        "status": StatusEnum.FAILED,
+                        "action": action,
+                        "fail_reason": "Cannot confirm: No existing bid data found"
+                    })
+            
+                return jsonify({
+                    "status": StatusEnum.SUCCESS,
+                    "action": action,
+                    "fail_reason": None
+                })
+        except Exception:
+            return jsonify({
+                "status": StatusEnum.FAILED,
+                "action": action,
+                "fail_reason": "Confirmation failed: Unable to update bidding record"
+            })
 
     # ---------------------
     # [3] edit (사용자 입력 파싱 → DB 수정)
     # ---------------------
-    
-    # 수정하고 입력만 들어왔을 때
-    elif user_input == "수정하고 입력":
-        return jsonify({
-            "status": StatusEnum.SUCCESS,
-            "fail_reason": None,
-            "message": """
-수정하고 진행을 선택하셨습니다.
+    elif action == "edit":
+        # 데이터 누락
+        if not bid or "entity_name" not in bid or "bid_price_per_kwh" not in bid:
+            return jsonify({
+                "status": "failed",
+                "action": action,
+                "fail_reason": "Missing bid data: Price or entity not provided"   
+            })
 
-수정할 발전소의 종류와 입찰가를 작성해주시길 바랍니다.
+        entity_name = bid["entity_name"]
+        new_price = bid["bid_price_per_kwh"]
 
-예시)
-태양광 입찰가 124원
-풍력 123원/kwh
-배터리 입찰 안함
-배터리 off
-"""
-        })
-    elif any(i in user_input for i in ["입찰가", "입찰 안함", "안함", "off", "태양광", "풍력", "배터리"]):
-        solar_data = None
-        wind_data = None
-        battery_data = None
+        ENTITY_NAME_TO_ID = {"태양광": 1, "풍력": 2, "배터리": 3}
+        target_entity_id = ENTITY_NAME_TO_ID.get(entity_name)
 
-        # 태양광 파싱
-        if "태양광 입찰 안함" in user_input or "태양광 안함" in user_input or "태양광 off" in user_input:
-            solar_data = {
-                    "price":None
-                }
-        else:
-            solar_input = re.search(r"태양광.*?입찰가\s*([\d.]+)", user_input)
-            if solar_input:
-                solar_data = {
-                    "price":float(solar_input.group(1))
-                }
-        # 풍력 파싱
-        if "풍력 입찰 안함" in user_input or "풍력 안함" in user_input or "풍력 off" in user_input:
-            wind_data = {
-                "price":None
-            }
-        else:
-            wind_input = re.search(r"풍력.*?입찰가\s*([\d.]+)", user_input)
-            if wind_input:
-                wind_data = {
-                    "price":float(wind_input.group(1))
-                }
-        # 배터리 파싱
-        if "배터리 입찰 안함" in user_input or "배터리 안함" in user_input or "배터리 off" in user_input:
-            battery_data = {
-                "price":None
-            }
-        else:
-            battery_input = re.search(r"배터리.*?입찰가\s*([\d.]+)", user_input)
-            if battery_input:
-                battery_data = {
-                    "price":float(battery_input.group(1))
-                }
-
+        # 허용되지 않은 entity
+        if target_entity_id is None:
+            return jsonify({
+                "status": "failed",
+                "action": action,
+                "fail_reason": "Invalid entity: Must be one of ['태양광', '풍력', '배터리']"
+            })
+        
         try:
             conn = get_connection()
 
@@ -416,19 +406,13 @@ def put_edit_fix():
 
                 for row in rows:
                     entity_id = row["entity_id"]
-                    entity_name = ENTITY_TYPE[entity_id]
                     old_price = row["bid_price_per_kwh"]
 
-                    # 값이 수정되었으면 가격 수정
-                    if entity_id == 1:
-                        new_price = solar_data.get("price") if solar_data else old_price
-                    elif entity_id == 2:
-                        new_price = wind_data.get("price") if wind_data else old_price
-                    elif entity_id == 3:
-                        new_price = battery_data.get("price") if battery_data else old_price
-                        
-                    if new_price is None:
-                        new_price = old_price
+                    # 프론트에서 요청한 entity만 수정
+                    if entity_id == target_entity_id:
+                        update_price = new_price
+                    else:
+                        update_price = old_price  # 그대로 유지
 
                     # db에 수정된 값들 넣기
                     cursor.execute("""
@@ -444,26 +428,29 @@ def put_edit_fix():
                         UPDATE bidding_log
                         SET bid_price_per_kwh = %s
                         WHERE id = %s
-                    """, (new_price, last_row["id"]))
+                    """, (update_price, last_row["id"]))
 
                 conn.commit()
 
                 # edit, confirm, timeout
                 return jsonify({
                     "status": StatusEnum.SUCCESS,
-                    "action": "edit",  
+                    "action": action,  
                     "fail_reason": None
                     })
 
-        # 서버 내부 문제
         except Exception as e:
-            print("에러 발생: ", str(e))
             return jsonify({ 
                 "status": StatusEnum.FAILED, 
-                "action": "edit",
-                "fail_reason": "server_error" 
+                "action": action,
+                "fail_reason": "Failed to save user edit: Database error" 
                 })
-
+    else:
+        return jsonify({
+            "status": StatusEnum.FAILED,
+            "action": action,
+            "fail_reason": "Internal server error while processing user response"  
+        })
 # --------------------------------------------------------------------------------
 # LLM <-> 서버
 # --------------------------------------------------------------------------------
