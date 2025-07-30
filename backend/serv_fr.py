@@ -205,7 +205,6 @@ def get_bidding_result():
             sql = """
                 SELECT entity_id, result, bid_price
                 FROM bidding_result
-                ORDER BY bid_time DESC
                 LIMIT 1
             """
             cursor.execute(sql)
