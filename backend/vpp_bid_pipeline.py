@@ -37,8 +37,8 @@ llm = ChatOpenAI(model='gpt-4o', temperature=0.3)
 # ✅ Step 1: 자원 상태 요약
 @app.route('/llm_serv/node_status', methods=['GET'])
 def node_status_summary():
-    node_status_res = requests.get("http://127.0.0.1:5001/data/node_status").json()
-    weather_res = requests.get("http://127.0.0.1:5001/data/weather").json()
+    node_status_res = requests.get("http://127.0.0.1:5001/llm_serv/node_status").json()
+    weather_res = requests.get("http://127.0.0.1:5001/llm_serv/weather").json()
 
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content="너는 VPP 시스템의 자원 분석 전문가야."),
@@ -68,7 +68,7 @@ JSON으로 자원별 상태 요약을 주고, 아래에는 요약 설명문도 �
 # ✅ Step 2: SMP 시장 분석
 @app.route('/llm/get_smp', methods=['GET'])
 def get_smp_summary():
-    smp_res = requests.get("http://127.0.0.1:5001/data/smp_4d").json()
+    smp_res = requests.get("http://127.0.0.1:5001/llm_serv/get_smp").json()
 
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content="너는 전력 시장의 SMP 분석 전문가야."),
