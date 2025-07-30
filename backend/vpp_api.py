@@ -204,7 +204,7 @@ def get_profit_result():
     
 
 # 3. GET/generate_bid: 생성한 입찰 보여주기 (서버 -> 프론트)
-@vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"])
+@vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"], endpoint="generate_bid_get")
 def generate_bid():
     try:
         conn = get_connection()
@@ -381,7 +381,7 @@ def get_weather():
 
 
 # 3. Post/generate_bid: 생성한 입찰 제안 bidding_log에 저장 (LLM -> 서버)
-@vpp_blueprint.route('/llm_serv/generate_bid', methods=['POST'])
+@vpp_blueprint.route('/llm_serv/generate_bid', methods=['POST'], endpoint="generate_bid_post")
 def generate_bid():
     try:
         data = request.get_json()
