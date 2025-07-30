@@ -4,8 +4,9 @@ import pymysql
 import json
 from flask_cors import CORS
 
+
 def get_connection():
-    return pymysql.connect(
+    conn = pymysql.connect(
         host="database-1.cts2qeeg0ot5.ap-northeast-2.rds.amazonaws.com",
         user="kevin",
         db="vpp_2",
@@ -13,20 +14,22 @@ def get_connection():
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor
     )
+    with conn.cursor() as cursor:
+        cursor.execute("SET time_zone = '+09:00'")
+    return conn
 
 
 vpp_blueprint = Blueprint("vpp", __name__)
+
 
 @vpp_blueprint.route("/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "running"})
 
 
-
 # --------------------------------------------------------------------------------
-# 사용하는 ID, Key, 유틸 등 
+# 사용하는 ID, Key, 유틸 등
 # --------------------------------------------------------------------------------
-
 # 키 변환 매핑 (generate_bid용)
 KEY_MAPPING = {
     'bid_quantity': 'bid_quantity_kwh',
@@ -50,11 +53,11 @@ RESOURCE_EXTRA_FIELDS = {
 
 # relay_id 발전소 타입
 RELAY_TYPE = {
-    1:"solar",
-    2:"wind",
-    3:"battery",
-    4:"solar",
-    5:"wind"
+    1: "solar",
+    2: "wind",
+    3: "battery",
+    4: "solar",
+    5: "wind"
 }
 
 
@@ -69,8 +72,6 @@ def is_relay_connected(relay_id):
 
 def is_entity_active(relay_id):
     return True
-
-
 
 
 # --------------------------------------------------------------------------------
@@ -110,11 +111,11 @@ def get_node_result():
 
             # 설비별로 데이터 분류
             data = {
-                "solar" : [],
-                "wind" : [],
-                "battery" : []
-                }
-            
+                "solar": [],
+                "wind": [],
+                "battery": []
+            }
+
             for row in rows:
                 equip_type = RELAY_TYPE[row["relay_id"]]
                 if equip_type:
@@ -125,22 +126,21 @@ def get_node_result():
                     })
 
             return jsonify({
-                "status": "success", 
+                "status": "success",
                 "data": data,
                 "timestamp": rows[0]["node_timestamp"].isoformat(),
                 "fail_reason": None
-                })
+            })
 
     # 서버 내부 문제
     except Exception as e:
         print("에러 발생: ", str(e))
-        return jsonify({ 
-            "status": "failed", 
+        return jsonify({
+            "status": "failed",
             "data": None,
             "timestamp": None,
-            "fail_reason": "server_error" 
-            })
-
+            "fail_reason": "server_error"
+        })
 
 
 # 2. GET/profit: 지금까지 얻은 총 수익 보여주기 (프론트 -> 서버)
@@ -173,7 +173,7 @@ def get_profit_result():
                     "timestamp": None,
                     "fail_reason": "no_data_total_generation_kwh"
                 })
-            
+
             if total_revenue_krw is None:
                 # 데이터가 아예 없을 때 실패 처리
                 return jsonify({
@@ -184,24 +184,24 @@ def get_profit_result():
                 })
 
             return jsonify({
-                "status": "success", 
+                "status": "success",
                 "data": {
-                    "total_revenue_krw" : total_revenue_krw,
-                    "total_generation_kwh" : total_generation_kwh
-                    },
+                    "total_revenue_krw": total_revenue_krw,
+                    "total_generation_kwh": total_generation_kwh
+                },
                 "fail_reason": None
-                })
+            })
 
     # 서버 내부 문제
     except Exception as e:
         print("에러 발생: ", str(e))
-        return jsonify({ 
-            "status": "failed", 
+        return jsonify({
+            "status": "failed",
             "data": None,
             "timestamp": None,
-            "fail_reason": "server_error" 
-            })
-    
+            "fail_reason": "server_error"
+        })
+
 
 # 3. GET/generate_bid: 생성한 입찰 보여주기 (서버 -> 프론트)
 @vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"], endpoint="generate_bid_get")
@@ -286,7 +286,6 @@ def get_bidding_result():
         })
 
 
-
 # --------------------------------------------------------------------------------
 # LLM <-> 서버
 # --------------------------------------------------------------------------------
@@ -313,7 +312,8 @@ def fetch_smp_for_time_blocks(base_time):
             query = "SELECT price_krw FROM smp WHERE smp_time = %s LIMIT 1"
             cursor.execute(query, (dt,))
             result = cursor.fetchone()
-            smp_data[base_time_key].append(result["price_krw"] if result else None)
+            smp_data[base_time_key].append(
+                result["price_krw"] if result else None)
 
         # 전날 ~ 3일 전까지: base_time 기준 - N일
         for i in range(1, 4):
@@ -342,6 +342,7 @@ def fetch_smp_for_time_blocks(base_time):
     except Exception as e:
         print("Unexpected error:", e)
         return {"error": "invalid_format"}
+
 
 @vpp_blueprint.route("/llm_serv/get_smp", methods=["GET"])
 def get_smp():
@@ -374,8 +375,8 @@ def get_smp():
 
 
 # 2. GET/get_weather: 날씨 데이터 요청 (LLM -> 서버)
-# 15분마다 날씨 데이터 정리해서 가져오기 
-@vpp_blueprint.route("/llm_serv/get_weather", methods= ["GET"])
+# 15분마다 날씨 데이터 정리해서 가져오기
+@vpp_blueprint.route("/llm_serv/get_weather", methods=["GET"])
 def get_weather():
     pass
 
@@ -405,7 +406,8 @@ def generate_bid():
                 if old_key in bid:
                     bid[new_key] = bid.pop(old_key)
 
-            required_fields = ['entity_id', 'recommendation', 'llm_reasoning', 'bid_quantity_kwh']
+            required_fields = ['entity_id', 'recommendation',
+                               'llm_reasoning', 'bid_quantity_kwh']
             for field in required_fields:
                 if field not in bid:
                     raise ValueError(f"missing field: {field}")
@@ -443,8 +445,6 @@ def generate_bid():
         print("❌ 데이터 오류:", str(e))
         return jsonify({"result": "Failed", "reason": "empty_bid_list"}), 400
 
-
-    
     except pymysql.err.IntegrityError as e:
         print("❌ IntegrityError:", e)
         return jsonify({"result": "Failed", "reason": f"sql_insert_error: {str(e)}"}), 500
@@ -527,7 +527,8 @@ def get_node_status():
 
         resources = []
         missing_fields = []
-        timestamps = [entry['node_timestamp'] for entry in latest_logs.values()]
+        timestamps = [entry['node_timestamp']
+                      for entry in latest_logs.values()]
         timestamp = max(timestamps).strftime("%Y-%m-%dT%H:%M:%S")
 
         for res_type, log in latest_logs.items():
@@ -573,8 +574,6 @@ def get_node_status():
     except Exception as e:
         print(f"❌ 내부 오류: {e}")
         return jsonify({"result": "Failed", "reason": "internal_server_error"}), 500
-
-
 
 
 # --------------------------------------------------------------------------------
@@ -655,6 +654,10 @@ def receive_node_status():
 @vpp_blueprint.route("/serv_ardu/command", methods=["GET"])
 def get_all_commands():
     try:
+        page = int(request.args.get("page", 1))
+        page_size = 20  # 한 번에 20개씩 전송
+        offset = (page - 1) * page_size
+
         conn = get_connection()
         with conn.cursor() as cursor:
             sql = """
@@ -673,6 +676,7 @@ def get_all_commands():
                     GROUP BY bid_id
                 )
             ) br ON rs.relay_id = br.bid_id
+            LIMIT {page_size} OFFSET {offset}
             """
             cursor.execute(sql)
             results = cursor.fetchall()
@@ -699,5 +703,3 @@ def get_all_commands():
             "commands": None,
             "fail_reason": f"internal server error: {str(e)}"
         })
-
-
