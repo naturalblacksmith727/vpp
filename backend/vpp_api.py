@@ -654,6 +654,10 @@ def receive_node_status():
 @vpp_blueprint.route("/serv_ardu/command", methods=["GET"])
 def get_all_commands():
     try:
+        page = int(request.args.get("page", 1))
+        page_size = 20  # 한 번에 20개씩 전송
+        offset = (page - 1) * page_size
+
         conn = get_connection()
         with conn.cursor() as cursor:
             sql = """
@@ -672,6 +676,7 @@ def get_all_commands():
                     GROUP BY bid_id
                 )
             ) br ON rs.relay_id = br.bid_id
+            LIMIT {page_size} OFFSET {offset}
             """
             cursor.execute(sql)
             results = cursor.fetchall()
