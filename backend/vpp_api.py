@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 import pytz
 import pymysql
 import json
-import re
 from flask_cors import CORS
 from enum import Enum
 
