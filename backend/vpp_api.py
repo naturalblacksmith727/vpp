@@ -686,20 +686,18 @@ def get_all_commands():
         for row in results:
             commands.append({
                 "relay_id": row["relay_id"],
-                "status": row["status"],
-                "last_updated": row["last_updated"].strftime("%Y-%m-%d %H:%M:%S"),
-                "reason": row.get("reason")  # NULL인 경우도 처리
+                "status": row["status"]
             })
 
         return jsonify({
-            "status": "success",
+            "result": "success",
             "commands": commands,
             "fail_reason": None
         })
 
     except Exception as e:
         return jsonify({
-            "status": "failed",
+            "result": "failed",
             "commands": None,
             "fail_reason": f"internal server error: {str(e)}"
         })
