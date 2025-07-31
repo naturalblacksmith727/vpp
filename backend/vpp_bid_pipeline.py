@@ -2,7 +2,7 @@ import requests
 import json
 import time
 from datetime import datetime
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema import SystemMessage, HumanMessage
 
@@ -52,8 +52,18 @@ def summarize_node_and_weather(data_combined):
     ])
     resource_data = json.dumps(data_combined, ensure_ascii=False)
     res = llm(prompt.format_messages(resource_data=resource_data))
-    split = res.content.strip().split("\n", 1)
-    return json.loads(split[0]), split[1] if len(split) > 1 else ""
+
+    try:
+        content = res.content.strip()
+        json_start = content.find("📦 JSON:")
+        summary_start = content.find("📄 요약문:")
+        json_block = content[json_start + len("📦 JSON:"):summary_start].strip()
+        summary_text = content[summary_start + len("📄 요약문:"):].strip()
+        return json.loads(json_block), summary_text
+    except Exception as e:
+        print("❌ 응답 파싱 오류:", e)
+        print("📦 원본 응답:", res.content[:300])
+        raise
 
 # ✅ Step 2 프롬프트 (SMP 분석)
 def summarize_smp(smp_data):
@@ -78,8 +88,17 @@ def summarize_smp(smp_data):
 """)
     ])
     res = llm(prompt.format_messages())
-    split = res.content.strip().split("\n", 1)
-    return json.loads(split[0]), split[1] if len(split) > 1 else ""
+    try:
+        content = res.content.strip()
+        json_start = content.find("📦 JSON:")
+        summary_start = content.find("📄 요약문:")
+        json_block = content[json_start + len("📦 JSON:"):summary_start].strip()
+        summary_text = content[summary_start + len("📄 요약문:"):].strip()
+        return json.loads(json_block), summary_text
+    except Exception as e:
+        print("❌ SMP 응답 파싱 오류:", e)
+        print("📦 원본 응답:", res.content[:300])
+        raise
 
 # ✅ Step 3 프롬프트 (입찰 전략 생성)
 def generate_bid_strategy(resource_json, market_json):
@@ -117,8 +136,17 @@ def generate_bid_strategy(resource_json, market_json):
 """)
     ])
     res = llm(prompt.format_messages())
-    split = res.content.strip().split("\n", 1)
-    return json.loads(split[0]), split[1] if len(split) > 1 else ""
+    try:
+        content = res.content.strip()
+        json_start = content.find("📦 JSON:")
+        summary_start = content.find("📄 요약문:")
+        json_block = content[json_start + len("📦 JSON:"):summary_start].strip()
+        summary_text = content[summary_start + len("📄 요약문:"):].strip()
+        return json.loads(json_block), summary_text
+    except Exception as e:
+        print("❌ 입찰 전략 응답 파싱 오류:", e)
+        print("📦 원본 응답:", res.content[:300])
+        raise
 
 # ✅ 안전한 JSON 파싱 함수
 def safe_json(response, step_name=""):
@@ -141,14 +169,20 @@ def run_bid_pipeline():
         print(f"\n🚀 실행 시각: {bid_time}")
 
         try:
-            # Step 1: 자원 상태 + 날씨 (통합 호출)
+            # Step 1: 자원 상태 + 날씨
             node_status_res = requests.get("http://127.0.0.1:5001/llm_serv/node_status")
-            node_status_combined = safe_json(node_status_res, "Step1-node_status")
+            node_status = safe_json(node_status_res, "Step1-node_status")
 
-            if node_status_combined.get("result") != "success":
-                raise ValueError("Step1 node_status 통합 호출 실패")
+            if node_status.get("result") != "success":
+                raise ValueError("Step1 node_status 실패")
 
-            res_summary, res_text = summarize_node_and_weather(node_status_combined)
+            weather = node_status.get("weather")  # weather 포함돼 있음
+            data_combined = {
+                "node": node_status.get("node_status", []),
+                "weather": weather
+            }
+
+            res_summary, res_text = summarize_node_and_weather(data_combined)
             print("📦 Step1 결과:", res_summary)
             print("📄 Step1 요약:", res_text)
 
@@ -193,8 +227,7 @@ def run_bid_pipeline():
         except Exception as e:
             print(f"❌ 오류 발생: {e}")
 
-        # 15분 대기
-        time.sleep(900)
+        time.sleep(900)  # 15분 대기
 
 # ✅ 메인 실행
 if __name__ == '__main__':
