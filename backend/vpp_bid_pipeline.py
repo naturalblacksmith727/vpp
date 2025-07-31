@@ -6,6 +6,9 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema import SystemMessage, HumanMessage
 
+
+
+
 # ✅ LLM 초기화
 llm = ChatOpenAI(model='gpt-4o', temperature=0.3)
 
@@ -25,12 +28,20 @@ WEATHER_KEY_MAPPING = {
     "cloud_cover_okta": "전운량"
 }
 
-def map_weather_keys(weather):
+# def map_weather_keys(weather):
+#     return {
+#         WEATHER_KEY_MAPPING.get(k, k): v for k, v in weather.items() if k in WEATHER_KEY_MAPPING
+#     }
+
+# 키 클린업 및 매핑 함수
+def map_weather_keys(weather: dict) -> dict:
     return {
-        WEATHER_KEY_MAPPING.get(k, k): v for k, v in weather.items() if k in WEATHER_KEY_MAPPING
+        WEATHER_KEY_MAPPING.get(k.strip(), k.strip()): v
+        for k, v in weather.items()
     }
 
-# ✅ Step 1 프롬프트 (자원 + 기상 상태 요약)
+
+# 요약 함수 본체
 def summarize_node_and_weather(node_status, weather):
     prompt = ChatPromptTemplate.from_messages([
         (
@@ -63,11 +74,26 @@ def summarize_node_and_weather(node_status, weather):
             "자원 상태 데이터:\n\n{resource_data}"
         )
     ])
+
+    # 날씨 키 매핑 후 디버깅
     mapped_weather = map_weather_keys(weather)
+    print("✅ 매핑된 날씨 dict:", mapped_weather)
+
+    # JSON 생성 + 디버깅
     resource_data = json.dumps({'node': node_status, 'weather': mapped_weather}, ensure_ascii=False)
+    print("✅ LLM 전달용 JSON:", resource_data)
+
+    # LLM 호출 및 파싱
     res = llm(prompt.format_messages(resource_data=resource_data))
     split = res.content.strip().split("\n", 1)
-    return json.loads(split[0]), split[1] if len(split) > 1 else ""
+    
+    try:
+        parsed_json = json.loads(split[0])
+    except Exception as e:
+        print("❌ JSON 파싱 실패:", split[0])
+        raise e
+
+    return parsed_json, split[1] if len(split) > 1 else ""
 
 # ✅ Step 2 프롬프트 (SMP 분석)
 def summarize_smp(smp_data):
