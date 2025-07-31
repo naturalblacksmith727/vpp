@@ -160,7 +160,7 @@ def run_bid_pipeline():
             node_status_res = requests.get("http://127.0.0.1:5001/llm_serv/node_status")
             node_status = safe_json(node_status_res, "Step1-node_status")
 
-            if node_status.get("result") != "sucess":
+            if node_status.get("result") != "success":
                 raise ValueError("Step1 node_status 실패")
 
             # ✅ node_status 내부에서 weather 데이터 분리
