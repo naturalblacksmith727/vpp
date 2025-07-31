@@ -120,6 +120,18 @@ def generate_bid_strategy(resource_json, market_json):
     split = res.content.strip().split("\n", 1)
     return json.loads(split[0]), split[1] if len(split) > 1 else ""
 
+# ✅ 안전한 JSON 파싱 함수
+def safe_json(response, step_name=""):
+    try:
+        if response.status_code != 200 or not response.text.strip():
+            print(f"⚠️ {step_name} 응답 없음 또는 비정상 상태 코드: {response.status_code}")
+            return {"result": "Failed", "reason": "empty_or_error_response"}
+        return response.json()
+    except json.JSONDecodeError as e:
+        print(f"❌ {step_name} JSON 디코딩 오류: {e}")
+        print(f"📦 응답 내용 일부: {response.text[:100]}...")
+        return {"result": "Failed", "reason": "json_decode_error"}
+
 # ✅ 자동 입찰 파이프라인 실행 함수
 def run_bid_pipeline():
     while True:
@@ -130,15 +142,29 @@ def run_bid_pipeline():
 
         try:
             # Step 1: 자원 상태 + 날씨
-            node_status = requests.get("http://127.0.0.1:5001/llm_serv/node_status").json()
-            weather = requests.get("http://127.0.0.1:5001/llm_serv/weather").json()
+            node_status_res = requests.get("http://127.0.0.1:5001/llm_serv/node_status")
+            node_status = safe_json(node_status_res, "Step1-node_status")
+
+            weather_res = requests.get("http://127.0.0.1:5001/llm_serv/get_weather")
+            weather = safe_json(weather_res, "Step1-weather")
+
+            if node_status.get("result") != "sucess":
+                raise ValueError("Step1 node_status 실패")
+            if weather.get("result") != "success":
+                raise ValueError("Step1 weather 실패")
+
             res_summary, res_text = summarize_node_and_weather(node_status, weather)
             print("📦 Step1 결과:", res_summary)
             print("📄 Step1 요약:", res_text)
 
             # Step 2: SMP 분석
-            smp_data_raw = requests.get("http://127.0.0.1:5001/llm_serv/get_smp").json()
-            smp_data = json.dumps(smp_data_raw, ensure_ascii=False, indent=2)
+            smp_res = requests.get("http://127.0.0.1:5001/llm_serv/get_smp")
+            smp_data_raw = safe_json(smp_res, "Step2-SMP")
+
+            if smp_data_raw.get("result") != "success":
+                raise ValueError(f"Step2 실패: {smp_data_raw.get('reason')}")
+
+            smp_data = json.dumps(smp_data_raw["smp_data"], ensure_ascii=False, indent=2)
             smp_summary, smp_text = summarize_smp(smp_data)
             print("📦 Step2 결과:", smp_summary)
             print("📄 Step2 요약:", smp_text)

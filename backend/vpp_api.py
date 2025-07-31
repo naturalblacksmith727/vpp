@@ -726,7 +726,7 @@ def get_node_status():
             }), 200
 
         return jsonify({
-            "result": "sucess",
+            "result": "success",
             "timestamp": timestamp,
             "resources": resources
         }), 200
