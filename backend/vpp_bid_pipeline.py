@@ -156,20 +156,19 @@ def run_bid_pipeline():
 
         try:
             # Step 1: 자원 상태 + 날씨
+          # Step 1: 자원 상태 + 날씨
             node_status_res = requests.get("http://127.0.0.1:5001/llm_serv/node_status")
             node_status = safe_json(node_status_res, "Step1-node_status")
 
-            weather_res = requests.get("http://127.0.0.1:5001/llm_serv/get_weather")
-            weather = safe_json(weather_res, "Step1-weather")
-
             if node_status.get("result") != "sucess":
                 raise ValueError("Step1 node_status 실패")
-            if weather.get("result") != "success":
-                raise ValueError("Step1 weather 실패")
 
-            res_summary, res_text = summarize_node_and_weather(node_status, weather)
-            print("📦 Step1 결과:", res_summary)
-            print("📄 Step1 요약:", res_text)
+            # ✅ node_status 내부에서 weather 데이터 분리
+            weather = node_status["data"][-1]  # 마지막 요소는 날씨 JSON
+            resources = node_status["data"][:-1]  # 앞쪽은 자원 리스트
+
+            res_summary, res_text = summarize_node_and_weather(resources, weather)
+
 
             # Step 2: SMP 분석
             smp_res = requests.get("http://127.0.0.1:5001/llm_serv/get_smp")
