@@ -1,7 +1,6 @@
 import requests
 import json
 import time
-import sys
 from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
@@ -18,8 +17,21 @@ KEY_MAPPING = {
     'recommendation': 'recommendation'
 }
 
+# ✅ 날씨 키 매핑 (영→한)
+WEATHER_KEY_MAPPING = {
+    "temperature_c": "온도",
+    "rainfall_mm": "강수량",
+    "humidity_pct": "습도",
+    "cloud_cover_okta": "전운량"
+}
+
+def map_weather_keys(weather):
+    return {
+        WEATHER_KEY_MAPPING.get(k, k): v for k, v in weather.items() if k in WEATHER_KEY_MAPPING
+    }
+
 # ✅ Step 1 프롬프트 (자원 + 기상 상태 요약)
-def summarize_node_and_weather(data_combined):
+def summarize_node_and_weather(node_status, weather):
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -51,20 +63,11 @@ def summarize_node_and_weather(data_combined):
             "자원 상태 데이터:\n\n{resource_data}"
         )
     ])
-    resource_data = json.dumps(data_combined, ensure_ascii=False)
+    mapped_weather = map_weather_keys(weather)
+    resource_data = json.dumps({'node': node_status, 'weather': mapped_weather}, ensure_ascii=False)
     res = llm(prompt.format_messages(resource_data=resource_data))
-
-    try:
-        content = res.content.strip()
-        json_start = content.find("📦 JSON:")
-        summary_start = content.find("📄 요약문:")
-        json_block = content[json_start + len("📦 JSON:"):summary_start].strip()
-        summary_text = content[summary_start + len("📄 요약문:"):].strip()
-        return json.loads(json_block), summary_text
-    except Exception as e:
-        print("❌ 응답 파싱 오류:", e)
-        print("📦 원본 응답:", res.content[:300])
-        raise
+    split = res.content.strip().split("\n", 1)
+    return json.loads(split[0]), split[1] if len(split) > 1 else ""
 
 # ✅ Step 2 프롬프트 (SMP 분석)
 def summarize_smp(smp_data):
@@ -89,17 +92,8 @@ def summarize_smp(smp_data):
 """)
     ])
     res = llm(prompt.format_messages())
-    try:
-        content = res.content.strip()
-        json_start = content.find("📦 JSON:")
-        summary_start = content.find("📄 요약문:")
-        json_block = content[json_start + len("📦 JSON:"):summary_start].strip()
-        summary_text = content[summary_start + len("📄 요약문:"):].strip()
-        return json.loads(json_block), summary_text
-    except Exception as e:
-        print("❌ SMP 응답 파싱 오류:", e)
-        print("📦 원본 응답:", res.content[:300])
-        raise
+    split = res.content.strip().split("\n", 1)
+    return json.loads(split[0]), split[1] if len(split) > 1 else ""
 
 # ✅ Step 3 프롬프트 (입찰 전략 생성)
 def generate_bid_strategy(resource_json, market_json):
@@ -137,17 +131,8 @@ def generate_bid_strategy(resource_json, market_json):
 """)
     ])
     res = llm(prompt.format_messages())
-    try:
-        content = res.content.strip()
-        json_start = content.find("📦 JSON:")
-        summary_start = content.find("📄 요약문:")
-        json_block = content[json_start + len("📦 JSON:"):summary_start].strip()
-        summary_text = content[summary_start + len("📄 요약문:"):].strip()
-        return json.loads(json_block), summary_text
-    except Exception as e:
-        print("❌ 입찰 전략 응답 파싱 오류:", e)
-        print("📦 원본 응답:", res.content[:300])
-        raise
+    split = res.content.strip().split("\n", 1)
+    return json.loads(split[0]), split[1] if len(split) > 1 else ""
 
 # ✅ 안전한 JSON 파싱 함수
 def safe_json(response, step_name=""):
@@ -174,16 +159,15 @@ def run_bid_pipeline():
             node_status_res = requests.get("http://127.0.0.1:5001/llm_serv/node_status")
             node_status = safe_json(node_status_res, "Step1-node_status")
 
-            if node_status.get("result") != "success":
+            weather_res = requests.get("http://127.0.0.1:5001/llm_serv/get_weather")
+            weather = safe_json(weather_res, "Step1-weather")
+
+            if node_status.get("result") != "sucess":
                 raise ValueError("Step1 node_status 실패")
+            if weather.get("result") != "success":
+                raise ValueError("Step1 weather 실패")
 
-            weather = node_status.get("weather")  # weather 포함돼 있음
-            data_combined = {
-                "node": node_status.get("node_status", []),
-                "weather": weather
-            }
-
-            res_summary, res_text = summarize_node_and_weather(data_combined)
+            res_summary, res_text = summarize_node_and_weather(node_status, weather)
             print("📦 Step1 결과:", res_summary)
             print("📄 Step1 요약:", res_text)
 
@@ -204,7 +188,7 @@ def run_bid_pipeline():
             print("📦 Step3 결과:", bid_result)
             print("📄 Step3 요약:", bid_summary)
 
-            # ✅ Step 3 결과 → DB 필드명 변환
+            # Step 3 결과 → DB 필드명 변환
             converted_bids = []
             for bid in bid_result:
                 converted = {}
