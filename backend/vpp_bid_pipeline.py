@@ -18,7 +18,7 @@ KEY_MAPPING = {
 }
 
 # ✅ Step 1 프롬프트 (자원 + 기상 상태 요약)
-def summarize_node_and_weather(node_status, weather):
+def summarize_node_and_weather(data_combined):
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -50,7 +50,7 @@ def summarize_node_and_weather(node_status, weather):
             "자원 상태 데이터:\n\n{resource_data}"
         )
     ])
-    resource_data = json.dumps({'node': node_status, 'weather': weather}, ensure_ascii=False)
+    resource_data = json.dumps(data_combined, ensure_ascii=False)
     res = llm(prompt.format_messages(resource_data=resource_data))
     split = res.content.strip().split("\n", 1)
     return json.loads(split[0]), split[1] if len(split) > 1 else ""
@@ -141,19 +141,14 @@ def run_bid_pipeline():
         print(f"\n🚀 실행 시각: {bid_time}")
 
         try:
-            # Step 1: 자원 상태 + 날씨
+            # Step 1: 자원 상태 + 날씨 (통합 호출)
             node_status_res = requests.get("http://127.0.0.1:5001/llm_serv/node_status")
-            node_status = safe_json(node_status_res, "Step1-node_status")
+            node_status_combined = safe_json(node_status_res, "Step1-node_status")
 
-            weather_res = requests.get("http://127.0.0.1:5001/llm_serv/get_weather")
-            weather = safe_json(weather_res, "Step1-weather")
+            if node_status_combined.get("result") != "success":
+                raise ValueError("Step1 node_status 통합 호출 실패")
 
-            if node_status.get("result") != "sucess":
-                raise ValueError("Step1 node_status 실패")
-            if weather.get("result") != "success":
-                raise ValueError("Step1 weather 실패")
-
-            res_summary, res_text = summarize_node_and_weather(node_status, weather)
+            res_summary, res_text = summarize_node_and_weather(node_status_combined)
             print("📦 Step1 결과:", res_summary)
             print("📄 Step1 요약:", res_text)
 
