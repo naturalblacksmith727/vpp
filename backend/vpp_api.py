@@ -212,8 +212,8 @@ def get_profit_result():
             return jsonify({
                 "status": "success",
                 "data": {
-                    "total_revenue_krw": total_revenue_krw,
-                    "total_generation_kwh": total_generation_kwh
+                    "total_revenue_krw": total_revenue_krw["total_revenue_krw"],
+                    "total_generation_kwh": total_generation_kwh["total_generation_kwh"]
                 },
                 "fail_reason": None
             })
@@ -363,7 +363,7 @@ def put_edit_fix():
             })
 
     # ---------------------
-    # [3] edit (사용자 입력 파싱 → DB 수정)
+    # [3] edit (DB 수정)
     # ---------------------
     elif action == "edit":
         # 데이터 누락
