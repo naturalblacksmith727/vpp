@@ -281,7 +281,9 @@ def get_bidding_result():
             sql = """
                 SELECT entity_id, result, bid_price
                 FROM bidding_result
-                LIMIT 1
+                WHERE bid_id = (
+            SELECT MAX(bid_id) FROM bidding_result
+        )
             """
             cursor.execute(sql)
             result = cursor.fetchone()
@@ -510,7 +512,6 @@ def fetch_smp_for_time_blocks(base_time):
 
 @vpp_blueprint.route("/llm_serv/get_smp", methods=["GET"])
 def get_smp():
-    now = datetime.now().replace(second=0, microsecond=0)
     now = datetime.now().replace(second=0, microsecond=0)
     base_time = now
 
