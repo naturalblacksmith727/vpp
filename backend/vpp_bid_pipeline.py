@@ -182,19 +182,26 @@ def run_bid_pipeline():
 
         try:
             # Step 1: 자원 상태 + 날씨
-          # Step 1: 자원 상태 + 날씨
             node_status_res = requests.get("http://127.0.0.1:5001/llm_serv/node_status")
             node_status = safe_json(node_status_res, "Step1-node_status")
 
             if node_status.get("result") != "success":
                 raise ValueError("Step1 node_status 실패")
 
-            # ✅ node_status 내부에서 weather 데이터 분리
-            weather = node_status["data"][-1]  # 마지막 요소는 날씨 JSON
-            resources = node_status["data"][:-1]  # 앞쪽은 자원 리스트
+            # ✅ 전체 자원 리스트
+            resources = node_status["resources"]
 
+            # ✅ 태양광 자원 하나 선택 (날씨 추출용 기준)
+            solar_resource = next((r for r in resources if r.get("type") == "태양광"), None)
+            if not solar_resource:
+                raise ValueError("태양광 자원이 없어서 날씨 추출 불가")
+
+            # ✅ weather 키만 필터링
+            weather_keys = ["cloud_cover_okta", "humidity_pct", "rainfall_mm", "temperature_c", "solar_irradiance"]
+            weather = {k: solar_resource.get(k) for k in weather_keys if k in solar_resource}
+
+            # ✅ AI 프롬프트 실행
             res_summary, res_text = summarize_node_and_weather(resources, weather)
-
 
             # Step 2: SMP 분석
             smp_res = requests.get("http://127.0.0.1:5001/llm_serv/get_smp")
