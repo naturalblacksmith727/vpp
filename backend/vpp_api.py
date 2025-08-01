@@ -296,7 +296,9 @@ def get_bidding_result():
             sql = """
                 SELECT entity_id, result, bid_price
                 FROM bidding_result
-                LIMIT 1
+                WHERE bid_id = (
+            SELECT MAX(bid_id) FROM bidding_result
+        )
             """
             cursor.execute(sql)
             result = cursor.fetchone()
@@ -552,7 +554,6 @@ def fetch_smp_for_time_blocks(base_time):
 @vpp_blueprint.route("/llm_serv/get_smp", methods=["GET"])
 def get_smp():
     now = datetime.now().replace(second=0, microsecond=0)
-    now = datetime.now().replace(second=0, microsecond=0)
     base_time = now
 
     print(f"[fetch_smp] base_time: {base_time}")
@@ -791,59 +792,55 @@ def receive_node_status():
     try:
         data = request.get_json()
 
-        required_fields = ["relay_id", "node_timestamp", "power_kw", "soc"]
+        required_fields = ["relay_id", "power_kw", "soc"]
         for field in required_fields:
             if field not in data:
                 return jsonify({
                     "result": "failed",
-                    "node_timestamp": data.get("node_timestamp"),
+                    "node_timestamp": None,
                     "reason": f"Missing required field: {field}"
                 })
-
-        try:
-            datetime.strptime(data["node_timestamp"], "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            return jsonify({
-                "result": "failed",
-                "node_timestamp": data["node_timestamp"],
-                "reason": "Invalid timestamp format"
-            })
 
         if not isinstance(data["power_kw"], (float, int)):
             return jsonify({
                 "result": "failed",
-                "node_timestamp": data["node_timestamp"],
+                "node_timestamp": None,
                 "reason": "Invalid type: power_kw must be float"
             })
 
         if data["soc"] is not None and not isinstance(data["soc"], (float, int)):
             return jsonify({
                 "result": "failed",
-                "node_timestamp": data["node_timestamp"],
+                "node_timestamp": None,
                 "reason": "Invalid type: soc must be float or null"
             })
 
         node_status_storage.append(data)
 
-        # DB 저장
+        # DB 저장 (node_timestamp는 DB에서 자동 생성됨)
         conn = get_connection()
         with conn.cursor() as cursor:
             sql = """
-            INSERT INTO node_status_log (node_timestamp, relay_id, power_kw, soc)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO node_status_log (relay_id, power_kw, soc)
+            VALUES (%s, %s, %s)
             """
             cursor.execute(sql, (
-                data["node_timestamp"],
                 data["relay_id"],
                 data["power_kw"],
                 data["soc"]
             ))
+
+            # 새로 삽입된 레코드의 timestamp 조회
+            cursor.execute(
+                "SELECT node_timestamp FROM node_status_log WHERE id = LAST_INSERT_ID()")
+            node_timestamp = cursor.fetchone()[0]
+
         conn.commit()
         conn.close()
 
         return jsonify({
             "result": "Success",
-            "node_timestamp": data["node_timestamp"],
+            "node_timestamp": node_timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "reason": None
         })
 
