@@ -166,16 +166,14 @@ def summarize_node_and_weather(node_status, weather, llm):
 
 
 
-# ✅ Step 2 프롬프트 (SMP 분석)
-def summarize_smp(smp_data):
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "너는 VPP 시장 입찰 분석 전문가야."),
-        ("human", f"""
-다음은 최근 SMP 시장 정보야:
+def summarize_smp(smp_data, llm):
+    # Step 1: JSON 생성 프롬프트
+    prompt_json = [
+        {"role": "system", "content": "너는 VPP 시장 입찰 분석 전문가야."},
+        {"role": "user", "content": f"""
+다음은 최근 SMP 시장 정보야. 아래 예시처럼 JSON 형식으로만 요약해줘. 설명은 하지 말고 JSON만 줘.
 
-{smp_data}
-
-📦 JSON 형식 (시장 분석 정리):
+예시:
 {{
   "avg_SMP_4d": 116.2,
   "today_SMP": 123.0,
@@ -183,14 +181,52 @@ def summarize_smp(smp_data):
   "comment": "SMP가 지속 상승 중이며, 발전량 증가로 경쟁 심화 예상"
 }}
 
+데이터:
+{smp_data}
+"""}
+    ]
+
+    # 1) JSON 생성 요청
+    res_json = llm(prompt_json)
+    content_json = res_json['choices'][0]['message']['content'].strip()
+
+    # 2) JSON 추출
+    try:
+        json_match = re.search(r'(\{.*\})', content_json, re.DOTALL)
+        if not json_match:
+            raise ValueError("JSON 형식을 응답에서 찾지 못했습니다.")
+        smp_json = json.loads(json_match.group(1))
+    except Exception as e:
+        print("❌ SMP JSON 파싱 실패:", e)
+        raise
+
+    # Step 2: 요약문 생성 프롬프트
+    json_text = json.dumps(smp_json, ensure_ascii=False, indent=2)
+    prompt_summary = [
+        {"role": "system", "content": "너는 VPP 시장 입찰 분석 전문가야."},
+        {"role": "user", "content": f"""
+주어진 JSON 데이터를 바탕으로 자연스럽고 간결한 한글 요약문을 작성해줘.
+- 최근 평균과 오늘 SMP 비교
+- 상승/하락 등 추세 언급
+- 경쟁 상황이나 참고 포인트 포함
+
+형식:
 📄 요약문:
-시장 평균 SMP는 116.2원이며, 현재는 123원으로 상승세입니다.  
-11시대는 발전 여건이 좋아 경쟁이 심화될 것으로 보입니다.
-""")
-    ])
-    res = llm(prompt.format_messages())
-    split = res.content.strip().split("\n", 1)
-    return json.loads(split[0]), split[1] if len(split) > 1 else ""
+시장 평균 SMP는 ~원이며, 현재는 ~원으로 (상승/하락)세입니다.
+...
+
+데이터:
+{json_text}
+"""}
+    ]
+
+    # 3) 요약문 요청
+    res_summary = llm(prompt_summary, smp_json)
+    summary_text = res_summary['choices'][0]['message']['content'].strip()
+
+    return smp_json, summary_text
+
+
 
 # ✅ Step 3 프롬프트 (입찰 전략 생성)
 def generate_bid_strategy(resource_json, market_json):
@@ -242,6 +278,7 @@ def safe_json(response, step_name=""):
         print(f"❌ {step_name} JSON 디코딩 오류: {e}")
         print(f"📦 응답 내용 일부: {response.text[:100]}...")
         return {"result": "Failed", "reason": "json_decode_error"}
+
 
 # ✅ 자동 입찰 파이프라인 실행 함수
 def run_bid_pipeline():
@@ -320,7 +357,6 @@ def run_bid_pipeline():
             res_json, res_summary = summarize_node_and_weather(filtered_nodes, weather, llm)
 
 
-
             # Step 2: SMP 분석
             smp_res = requests.get("http://127.0.0.1:5001/llm_serv/get_smp")
             smp_data_raw = safe_json(smp_res, "Step2-SMP")
@@ -329,7 +365,7 @@ def run_bid_pipeline():
                 raise ValueError(f"Step2 실패: {smp_data_raw.get('reason')}")
 
             smp_data = json.dumps(smp_data_raw["smp_data"], ensure_ascii=False, indent=2)
-            smp_summary, smp_text = summarize_smp(smp_data)
+            smp_summary, smp_text = summarize_smp(smp_data, llm)
             print("📦 Step2 결과:", smp_summary)
             print("📄 Step2 요약:", smp_text)
 
