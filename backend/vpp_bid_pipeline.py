@@ -25,6 +25,7 @@ WEATHER_KEY_MAPPING = {
     "cloud_cover_okta": "전운량"
 }
 
+
 def map_weather_keys(weather):
     return {
         WEATHER_KEY_MAPPING.get(k, k): v for k, v in weather.items() if k in WEATHER_KEY_MAPPING
