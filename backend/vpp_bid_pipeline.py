@@ -6,6 +6,9 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema import SystemMessage, HumanMessage
 
+
+
+
 # ✅ LLM 초기화
 llm = ChatOpenAI(model='gpt-4o', temperature=0.3)
 
@@ -26,12 +29,20 @@ WEATHER_KEY_MAPPING = {
 }
 
 
-def map_weather_keys(weather):
+# def map_weather_keys(weather):
+#     return {
+#         WEATHER_KEY_MAPPING.get(k, k): v for k, v in weather.items() if k in WEATHER_KEY_MAPPING
+#     }
+
+# 키 클린업 및 매핑 함수
+def map_weather_keys(weather: dict) -> dict:
     return {
-        WEATHER_KEY_MAPPING.get(k, k): v for k, v in weather.items() if k in WEATHER_KEY_MAPPING
+        WEATHER_KEY_MAPPING.get(k.strip(), k.strip()): v
+        for k, v in weather.items()
     }
 
-# ✅ Step 1 프롬프트 (자원 + 기상 상태 요약)
+
+# 요약 함수 본체
 def summarize_node_and_weather(node_status, weather):
     prompt = ChatPromptTemplate.from_messages([
         (
@@ -64,11 +75,26 @@ def summarize_node_and_weather(node_status, weather):
             "자원 상태 데이터:\n\n{resource_data}"
         )
     ])
+
+    # 날씨 키 매핑 후 디버깅
     mapped_weather = map_weather_keys(weather)
+    print("✅ 매핑된 날씨 dict:", mapped_weather)
+
+    # JSON 생성 + 디버깅
     resource_data = json.dumps({'node': node_status, 'weather': mapped_weather}, ensure_ascii=False)
+    print("✅ LLM 전달용 JSON:", resource_data)
+
+    # LLM 호출 및 파싱
     res = llm(prompt.format_messages(resource_data=resource_data))
     split = res.content.strip().split("\n", 1)
-    return json.loads(split[0]), split[1] if len(split) > 1 else ""
+    
+    try:
+        parsed_json = json.loads(split[0])
+    except Exception as e:
+        print("❌ JSON 파싱 실패:", split[0])
+        raise e
+
+    return parsed_json, split[1] if len(split) > 1 else ""
 
 # ✅ Step 2 프롬프트 (SMP 분석)
 def summarize_smp(smp_data):
@@ -157,19 +183,26 @@ def run_bid_pipeline():
 
         try:
             # Step 1: 자원 상태 + 날씨
-          # Step 1: 자원 상태 + 날씨
             node_status_res = requests.get("http://127.0.0.1:5001/llm_serv/node_status")
             node_status = safe_json(node_status_res, "Step1-node_status")
 
-            if node_status.get("result") != "sucess":
+            if node_status.get("result") != "success":
                 raise ValueError("Step1 node_status 실패")
 
-            # ✅ node_status 내부에서 weather 데이터 분리
-            weather = node_status["data"][-1]  # 마지막 요소는 날씨 JSON
-            resources = node_status["data"][:-1]  # 앞쪽은 자원 리스트
+            # ✅ 전체 자원 리스트
+            resources = node_status["resources"]
 
+            # ✅ 태양광 자원 하나 선택 (날씨 추출용 기준)
+            solar_resource = next((r for r in resources if r.get("type") == "태양광"), None)
+            if not solar_resource:
+                raise ValueError("태양광 자원이 없어서 날씨 추출 불가")
+
+            # ✅ weather 키만 필터링
+            weather_keys = ["cloud_cover_okta", "humidity_pct", "rainfall_mm", "temperature_c", "solar_irradiance"]
+            weather = {k: solar_resource.get(k) for k in weather_keys if k in solar_resource}
+
+            # ✅ AI 프롬프트 실행
             res_summary, res_text = summarize_node_and_weather(resources, weather)
-
 
             # Step 2: SMP 분석
             smp_res = requests.get("http://127.0.0.1:5001/llm_serv/get_smp")
