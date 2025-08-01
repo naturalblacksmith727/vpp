@@ -1,11 +1,13 @@
 import requests
 import json
 import time
-import sys
 from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema import SystemMessage, HumanMessage
+
+
+
 
 # ✅ LLM 초기화
 llm = ChatOpenAI(model='gpt-4o', temperature=0.3)
@@ -18,8 +20,30 @@ KEY_MAPPING = {
     'recommendation': 'recommendation'
 }
 
-# ✅ Step 1 프롬프트 (자원 + 기상 상태 요약)
-def summarize_node_and_weather(data_combined):
+# ✅ 날씨 키 매핑 (영→한)
+WEATHER_KEY_MAPPING = {
+    "temperature_c": "온도",
+    "rainfall_mm": "강수량",
+    "humidity_pct": "습도",
+    "cloud_cover_okta": "전운량"
+}
+
+
+# def map_weather_keys(weather):
+#     return {
+#         WEATHER_KEY_MAPPING.get(k, k): v for k, v in weather.items() if k in WEATHER_KEY_MAPPING
+#     }
+
+# 키 클린업 및 매핑 함수
+def map_weather_keys(weather: dict) -> dict:
+    return {
+        WEATHER_KEY_MAPPING.get(k.strip(), k.strip()): v
+        for k, v in weather.items()
+    }
+
+
+# 요약 함수 본체
+def summarize_node_and_weather(node_status, weather):
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -51,20 +75,26 @@ def summarize_node_and_weather(data_combined):
             "자원 상태 데이터:\n\n{resource_data}"
         )
     ])
-    resource_data = json.dumps(data_combined, ensure_ascii=False)
-    res = llm(prompt.format_messages(resource_data=resource_data))
 
+    # 날씨 키 매핑 후 디버깅
+    mapped_weather = map_weather_keys(weather)
+    print("✅ 매핑된 날씨 dict:", mapped_weather)
+
+    # JSON 생성 + 디버깅
+    resource_data = json.dumps({'node': node_status, 'weather': mapped_weather}, ensure_ascii=False)
+    print("✅ LLM 전달용 JSON:", resource_data)
+
+    # LLM 호출 및 파싱
+    res = llm(prompt.format_messages(resource_data=resource_data))
+    split = res.content.strip().split("\n", 1)
+    
     try:
-        content = res.content.strip()
-        json_start = content.find("📦 JSON:")
-        summary_start = content.find("📄 요약문:")
-        json_block = content[json_start + len("📦 JSON:"):summary_start].strip()
-        summary_text = content[summary_start + len("📄 요약문:"):].strip()
-        return json.loads(json_block), summary_text
+        parsed_json = json.loads(split[0])
     except Exception as e:
-        print("❌ 응답 파싱 오류:", e)
-        print("📦 원본 응답:", res.content[:300])
-        raise
+        print("❌ JSON 파싱 실패:", split[0])
+        raise e
+
+    return parsed_json, split[1] if len(split) > 1 else ""
 
 # ✅ Step 2 프롬프트 (SMP 분석)
 def summarize_smp(smp_data):
@@ -89,17 +119,8 @@ def summarize_smp(smp_data):
 """)
     ])
     res = llm(prompt.format_messages())
-    try:
-        content = res.content.strip()
-        json_start = content.find("📦 JSON:")
-        summary_start = content.find("📄 요약문:")
-        json_block = content[json_start + len("📦 JSON:"):summary_start].strip()
-        summary_text = content[summary_start + len("📄 요약문:"):].strip()
-        return json.loads(json_block), summary_text
-    except Exception as e:
-        print("❌ SMP 응답 파싱 오류:", e)
-        print("📦 원본 응답:", res.content[:300])
-        raise
+    split = res.content.strip().split("\n", 1)
+    return json.loads(split[0]), split[1] if len(split) > 1 else ""
 
 # ✅ Step 3 프롬프트 (입찰 전략 생성)
 def generate_bid_strategy(resource_json, market_json):
@@ -137,17 +158,8 @@ def generate_bid_strategy(resource_json, market_json):
 """)
     ])
     res = llm(prompt.format_messages())
-    try:
-        content = res.content.strip()
-        json_start = content.find("📦 JSON:")
-        summary_start = content.find("📄 요약문:")
-        json_block = content[json_start + len("📦 JSON:"):summary_start].strip()
-        summary_text = content[summary_start + len("📄 요약문:"):].strip()
-        return json.loads(json_block), summary_text
-    except Exception as e:
-        print("❌ 입찰 전략 응답 파싱 오류:", e)
-        print("📦 원본 응답:", res.content[:300])
-        raise
+    split = res.content.strip().split("\n", 1)
+    return json.loads(split[0]), split[1] if len(split) > 1 else ""
 
 # ✅ 안전한 JSON 파싱 함수
 def safe_json(response, step_name=""):
@@ -177,15 +189,20 @@ def run_bid_pipeline():
             if node_status.get("result") != "success":
                 raise ValueError("Step1 node_status 실패")
 
-            weather = node_status.get("weather")  # weather 포함돼 있음
-            data_combined = {
-                "node": node_status.get("node_status", []),
-                "weather": weather
-            }
+            # ✅ 전체 자원 리스트
+            resources = node_status["resources"]
 
-            res_summary, res_text = summarize_node_and_weather(data_combined)
-            print("📦 Step1 결과:", res_summary)
-            print("📄 Step1 요약:", res_text)
+            # ✅ 태양광 자원 하나 선택 (날씨 추출용 기준)
+            solar_resource = next((r for r in resources if r.get("type") == "태양광"), None)
+            if not solar_resource:
+                raise ValueError("태양광 자원이 없어서 날씨 추출 불가")
+
+            # ✅ weather 키만 필터링
+            weather_keys = ["cloud_cover_okta", "humidity_pct", "rainfall_mm", "temperature_c", "solar_irradiance"]
+            weather = {k: solar_resource.get(k) for k in weather_keys if k in solar_resource}
+
+            # ✅ AI 프롬프트 실행
+            res_summary, res_text = summarize_node_and_weather(resources, weather)
 
             # Step 2: SMP 분석
             smp_res = requests.get("http://127.0.0.1:5001/llm_serv/get_smp")
@@ -204,7 +221,7 @@ def run_bid_pipeline():
             print("📦 Step3 결과:", bid_result)
             print("📄 Step3 요약:", bid_summary)
 
-            # ✅ Step 3 결과 → DB 필드명 변환
+            # Step 3 결과 → DB 필드명 변환
             converted_bids = []
             for bid in bid_result:
                 converted = {}
