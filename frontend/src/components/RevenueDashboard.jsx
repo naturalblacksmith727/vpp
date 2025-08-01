@@ -11,7 +11,7 @@ function RevenueDashboard() {
         .get("https://aivpp.duckdns.org/api/serv_fr/profit")
         .then((response) => {
           if (response.data.status === "success") {
-            setprofitData(response.data);
+            setprofitData(response.data.data);
           } else {
             setError("데이터를 가져오지 못했습니다.");
           }
@@ -35,9 +35,10 @@ function RevenueDashboard() {
     return <p>데이터 로딩 중...</p>;
   }
   // 총 누적 발전량
-  const total_generation_kwh = profitData.data.total_generation_kwh;
+  const total_generation_kwh =
+    profitData.total_generation_kwh["total_generation_kwh"];
   // 총 누적 수익
-  const total_revenue_krw = profitData.data.total_revenue_krw;
+  const total_revenue_krw = profitData.total_revenue_krw["tital_revenue_krw"];
 
   return (
     <div className="fixed top-20 right-6 border border-gray-300 p-4 rounded-lg  z-50 bg-white shadow-md">

@@ -107,54 +107,80 @@ def is_entity_active(relay_id):
 # 1. GET/node_status: 발전소 node_status: 발전소 결과 요청(서버->프론트엔드)
 @vpp_blueprint.route('/serv_fr/node_status', methods=['GET'])
 def get_node_result():
+    # 설비별로 데이터 분류
+    data = {
+        "solar": [],
+        "wind": [],
+        "battery": []
+    }
+
     try:
         conn = get_connection()
 
         with conn.cursor() as cursor:
-            # 가장 최근 시간 데이터를 가지고 있는 relay_id 1~5번 선택
+            # 태양광 시간별 전력량
             sql = """
-            SELECT n.*
-            FROM node_status_log n
-            JOIN(  
-                SELECT relay_id, MAX(node_timestamp) AS recent_time
-                FROM node_status_log 
-                GROUP BY relay_id
-                ) l
-            ON n.relay_id = l.relay_id AND n.node_timestamp = l.recent_time
-            ORDER BY n.relay_id
+            SELECT node_timestamp AS timestamp, ROUND(SUM(power_kw),2) AS power_kw
+            FROM node_status_log
+            WHERE relay_id IN (1, 4)
+            GROUP BY node_timestamp
+            ORDER BY node_timestamp;
             """
             cursor.execute(sql)
             rows = cursor.fetchall()
 
-            # 최근 기준 node_status_log 데이터가 없음
-            if not rows:
-                return jsonify({
-                    "status": "failed",
-                    "data": None,
-                    "timestamp": None,
-                    "fail_reason": "no_data_available"
-                })
+            if rows:
+                data["solar"]= [{"timestamp":row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'),"power_kw":row["power_kw"]} for row in rows]
+            else:
+                return jsonify({"status":"failed", "data":None, "timestamp":None, "fail_reason": "no_data_available"})
 
-            # 설비별로 데이터 분류
-            data = {
-                "solar": [],
-                "wind": [],
-                "battery": []
-            }
+            #풍력 시간별 전력량
+            sql = """
+            SELECT node_timestamp AS timestamp, ROUND(SUM(power_kw),2) AS power_kw
+            FROM node_status_log
+            WHERE relay_id IN (2, 5)
+            GROUP BY node_timestamp
+            ORDER BY node_timestamp;
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
 
-            for row in rows:
-                equip_type = RELAY_TYPE[row["relay_id"]]
-                if equip_type:
-                    data[equip_type].append({
-                        "relay_id": row["relay_id"],
-                        "power_kw": row["power_kw"],
-                        "soc": row["soc"]
-                    })
+            if rows:
+                data["wind"] = [{"timestamp":row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'),"power_kw":row["power_kw"]} for row in rows]
+            else:
+                return jsonify({"status":"failed", "data":None, "timestamp":None, "fail_reason": "no_data_available"})
+            
+            # 배터리 시간별 전력량 (relay_id 4,5는 더하고 3은 뺌)
+            sql = """
+            SELECT charging.timestamp AS timestamp, ROUND(charging.power_kw - COALESCE(usaged.power_kw,0),2) AS power_kw
+            FROM
+                (
+                    SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
+                    FROM node_status_log
+                    WHERE relay_id IN (4,5)
+                    GROUP BY node_timestamp
+                ) AS charging
+            LEFT JOIN
+                (
+                    SELECT node_timestamp AS timestamp, power_kw
+                    FROM node_status_log
+                    WHERE relay_id IN (3)
+                ) AS usaged
+            ON charging.timestamp = usaged.timestamp
+            ORDER BY charging.timestamp;
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+
+            if rows:
+                data["battery"]= [{"timestamp":row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'),"power_kw":row["power_kw"]} for row in rows]
+            else:
+                return jsonify({"status":"failed", "data":None, "timestamp":None, "fail_reason": "no_data_available"})
 
             return jsonify({
                 "status": "success",
                 "data": data,
-                "timestamp": rows[0]["node_timestamp"].isoformat(),
+                "timestamp": datetime.now().isoformat(timespec='seconds'),
                 "fail_reason": None
             })
 
@@ -751,59 +777,55 @@ def receive_node_status():
     try:
         data = request.get_json()
 
-        required_fields = ["relay_id", "node_timestamp", "power_kw", "soc"]
+        required_fields = ["relay_id", "power_kw", "soc"]
         for field in required_fields:
             if field not in data:
                 return jsonify({
                     "result": "failed",
-                    "node_timestamp": data.get("node_timestamp"),
+                    "node_timestamp": None,
                     "reason": f"Missing required field: {field}"
                 })
-
-        try:
-            datetime.strptime(data["node_timestamp"], "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            return jsonify({
-                "result": "failed",
-                "node_timestamp": data["node_timestamp"],
-                "reason": "Invalid timestamp format"
-            })
 
         if not isinstance(data["power_kw"], (float, int)):
             return jsonify({
                 "result": "failed",
-                "node_timestamp": data["node_timestamp"],
+                "node_timestamp": None,
                 "reason": "Invalid type: power_kw must be float"
             })
 
         if data["soc"] is not None and not isinstance(data["soc"], (float, int)):
             return jsonify({
                 "result": "failed",
-                "node_timestamp": data["node_timestamp"],
+                "node_timestamp": None,
                 "reason": "Invalid type: soc must be float or null"
             })
 
         node_status_storage.append(data)
 
-        # DB 저장
+        # DB 저장 (node_timestamp는 DB에서 자동 생성됨)
         conn = get_connection()
         with conn.cursor() as cursor:
             sql = """
-            INSERT INTO node_status_log (node_timestamp, relay_id, power_kw, soc)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO node_status_log (relay_id, power_kw, soc)
+            VALUES (%s, %s, %s)
             """
             cursor.execute(sql, (
-                data["node_timestamp"],
                 data["relay_id"],
                 data["power_kw"],
                 data["soc"]
             ))
+
+            # 새로 삽입된 레코드의 timestamp 조회
+            cursor.execute(
+                "SELECT node_timestamp FROM node_status_log WHERE id = LAST_INSERT_ID()")
+            node_timestamp = cursor.fetchone()[0]
+
         conn.commit()
         conn.close()
 
         return jsonify({
             "result": "Success",
-            "node_timestamp": data["node_timestamp"],
+            "node_timestamp": node_timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "reason": None
         })
 
