@@ -76,17 +76,6 @@ class ActionEnum(str, Enum):
     CONFIRM = "confirm"
     TIMEOUT = "timeout"
 
-# 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
-def is_timeout():
-    korea = pytz.timezone("Asia/Seoul")
-    now = datetime.now(korea)
-    minute = (now.minute // 15) * 15
-    start_time = now.replace(minute=minute, second=0, microsecond=0)
-    timeout_time = start_time + timedelta(minutes=14)
-
-    return now > timeout_time
-
-
 # 메모리 저장소
 node_status_storage = []
 
@@ -347,12 +336,38 @@ def put_edit_fix():
     # ---------------------
     # [1] 타임아웃 처리
     # ---------------------
-    if is_timeout():
-        return jsonify({
-            "status": StatusEnum.FAILED,
-            "action": ActionEnum.TIMEOUT,
-            "fail_reason": "Timeout processing failed: Could not write default bid"
-        })
+    if action == "timeout":
+        try:
+            conn = get_connection()
+            with conn.cursor() as cursor:
+                # 1-1. LLM이 제안한 최근 입찰안이 있는지 확인
+                cursor.execute("""
+                    SELECT *
+                    FROM bidding_log
+                    WHERE bid_time = (
+                        SELECT MAX(bid_time) FROM bidding_log
+                    )
+                """)
+                auto_bid = cursor.fetchone()
+
+                if not auto_bid:
+                    # LLM 입찰 제안이 아예 없을 경우
+                    return jsonify({
+                        "status": StatusEnum.FAILED,
+                        "action": action,
+                        "fail_reason": "Timeout fallback failed: No auto-generated bid found"
+                    })
+            return jsonify({
+                "status": StatusEnum.SUCCESS,
+                "action": action,
+                "fail_reason": None
+            })
+        except Exception:
+            return jsonify({
+                "status": StatusEnum.FAILED,
+                "action": action,
+                "fail_reason": "Timeout processing failed: Could not write default bid"
+            })
     
     # ---------------------
     # [2] confirm (수정 없이 진행)

@@ -13,32 +13,16 @@ import axios from "axios";
 import React, { useEffect, useState } from "react";
 
 function Graphs() {
-  const [sensorData, setSensorData] = useState(null);
-  const [aiData, setAiData] = useState(null);
+  const [nodeData, setNodeData] = useState(null);
   const [error, setError] = useState(null);
 
-  /*
   useEffect(() => {
     const fetchData = () => {
       axios
-        .get("https://aismartfarm.duckdns.org/api/sensor_data")
+        .get("https://aivpp.duckdns.org/api/serv_fr/node_status")
         .then((response) => {
-          if (response.data.result === "sended") {
-            setSensorData(response.data);
-          } else {
-            setError("데이터를 가져오지 못했습니다.");
-          }
-        })
-        .catch((err) => {
-          console.error(err);
-          setError("서버 연결에 실패했습니다.");
-        });
-
-      axios
-        .get("https://aismartfarm.duckdns.org/api/ai_diagnosis")
-        .then((response) => {
-          if (response.data.status == "Send Success!!") {
-            setAiData(response.data);
+          if (response.data.status === "success") {
+            setNodeData(response.data.data);
           } else {
             setError("데이터를 가져오지 못했습니다.");
           }
@@ -48,48 +32,40 @@ function Graphs() {
           setError("서버 연결에 실패했습니다.");
         });
     };
-    
 
     // 페이지 로드시 최초 1회 데이터 가져오기
     fetchData();
 
-    // 이후 5초마다 fetchData 반복 실행
-    const interval = setInterval(fetchData, 5000); // 5000ms = 5초
+    // 이후 20초마다 fetchData 반복 실행
+    const interval = setInterval(fetchData, 20000); // 20초
 
     return () => clearInterval(interval);
   }, []);
-    
 
   // 시간대별 온도
-  const tempData = sensorData
-    ? Object.entries(sensorData.data.temp).map(([time, value]) => ({
-        시간: time.slice(11, 16),
-        온도: value,
+  const sunData = nodeData
+    ? nodeData.solar.map((item) => ({
+        시간: item.timestamp.slice(11, 16),
+        생산전력량: item.power_kw,
       }))
     : [];
 
-  if (!aiData) {
+  const windData = nodeData
+    ? nodeData.wind.map((item) => ({
+        시간: item.timestamp.slice(11, 16),
+        생산전력량: item.power_kw,
+      }))
+    : [];
+  const batteryData = nodeData
+    ? nodeData.battery.map((item) => ({
+        시간: item.timestamp.slice(11, 16),
+        충전전력량: item.power_kw,
+      }))
+    : [];
+
+  if (!nodeData) {
     return <p>데이터 로딩 중...</p>;
   }
-    */
-
-  const sunData = [
-    { 시간: "11:00", 생산전력량: 50 },
-    { 시간: "12:00", 생산전력량: 60 },
-    { 시간: "13:00", 생산전력량: 70 },
-  ];
-
-  const windData = [
-    { 시간: "11:00", 생산전력량: 50 },
-    { 시간: "12:00", 생산전력량: 60 },
-    { 시간: "13:00", 생산전력량: 70 },
-  ];
-
-  const batteryData = [
-    { 시간: "11:00", 충전전력량: 50 },
-    { 시간: "12:00", 충전전력량: 60 },
-    { 시간: "13:00", 충전전력량: 70 },
-  ];
 
   return (
     <div className="w-full px-4 border border-gray-300 rounded-lg">
