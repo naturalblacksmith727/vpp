@@ -1,4 +1,3 @@
-# app.py
 from flask import Flask
 from flask_cors import CORS
 from vpp_api import vpp_blueprint

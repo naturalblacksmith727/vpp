@@ -3,39 +3,10 @@ import LoadingDots from "./LoadingDots";
 import React, { useEffect, useState, useRef } from "react";
 
 function ChatBot() {
-  /*
-    const [aiData, setAiData] = useState(null);
-    const [error, setError] = useState(null);
+  const [bidData, setBidData] = useState(null);
+  const [error, setError] = useState(null);
+  const lastMinuteRef = useRef(null); // 시간 확인용
 
-    useEffect(() => {
-      const fetchData = () => {
-        axios
-          .get("https://aismartfarm.duckdns.org/api/ai_diagnosis")
-          .then((response) => {
-            if (response.data.status == "Send Success!!") {
-              setAiData(response.data);
-            } else {
-              setError("데이터를 가져오지 못했습니다.");
-            }
-          })
-          .catch((err) => {
-            console.error(err);
-            setError("서버 연결에 실패했습니다.");
-          });
-      };
-      // 페이지 로드시 최초 1회 데이터 가져오기
-      fetchData();
-
-      // 이후 5초마다 fetchData 반복 실행
-      const interval = setInterval(fetchData, 5000); // 5000ms = 5초
-
-      return () => clearInterval(interval);
-    }, []);
-
-    if (!aiData) {
-      return <p>데이터 로딩 중...</p>;
-    }
-      */
   const [messages, setMessages] = useState([
     {
       sender: "bot",
@@ -49,9 +20,35 @@ function ChatBot() {
       }),
     },
   ]);
+
   const [input, setInput] = useState("");
 
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    const fetchData = () => {
+      axios
+        .get("https://aivpp.duckdns.org/api/serv_fr/generate_bid")
+        .then((response) => {
+          if (response.data.fail_reason === null) {
+            setBidData(response.data);
+          } else {
+            setError("데이터를 가져오지 못했습니다.");
+          }
+        })
+        .catch((err) => {
+          console.error(err);
+          setError("서버 연결에 실패했습니다.");
+        });
+    };
+    // 페이지 로드시 최초 1회 데이터 가져오기
+    fetchData();
+
+    // 이후 10초마다 fetchData 반복 실행
+    const interval = setInterval(fetchData, 10000); // 10000ms = 10초
+
+    return () => clearInterval(interval);
+  }, []);
 
   const sendMessage = () => {
     if (!input.trim()) return;
@@ -83,6 +80,55 @@ function ChatBot() {
       });
     }, 2000);
   };
+  // 시간마다 자동 메세지 전송
+  useEffect(() => {
+    const checkTimeAndSend = () => {
+      const now = new Date();
+      const minutes = now.getMinutes();
+
+      // 00, 15, 30, 45분만, 중복 방지
+      if (
+        [0, 15, 30, 45, 52, 53, 54, 55].includes(minutes) &&
+        lastMinuteRef.current !== minutes &&
+        bidData
+      ) {
+        lastMinuteRef.current = minutes;
+
+        const timestamp = now.toLocaleTimeString("ko-KR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        const year = now.getFullYear(); // 2025
+        const month = String(now.getMonth() + 1).padStart(2, "0"); // 07
+        const day = String(now.getDate()).padStart(2, "0"); // 21
+        const hour = String(now.getHours()).padStart(2, "0"); // 12
+        const minute = String(now.getMinutes()).padStart(2, "0"); // 00
+        const currtime = `${year}년 ${month}월 ${day}일 ${hour}:${minute}`;
+
+        const entityType = { 1: "태양광", 2: "풍력", 3: "배터리" };
+
+        const summary = bidData.bids
+          .map((b) => {
+            return `[${entityType[b.entity_id]}]\n- 입찰 전력량: ${
+              b.bid_quantity_kwh
+            }kWh\n- 입찰가 :${b.bid_price_per_kwh}원/kWh\n${b.llm_reasoning}`;
+          })
+          .join("\n\n");
+
+        const newMessage = {
+          sender: "bot",
+          text: `[${currtime}]\n== 실시간 입찰 전략 ==\n\n${summary}\n\n해당 입찰을 수락하시겠습니까?\n(수정없이 진행/ 수정하고 진행 입력)`,
+          timestamp,
+        };
+
+        setMessages((prev) => [...prev, newMessage]);
+      }
+    };
+
+    const interval = setInterval(checkTimeAndSend, 10000); // 10초마다 체크
+    return () => clearInterval(interval);
+  }, [bidData]);
 
   // 채팅창 자동으로 아래로 내리기
   useEffect(() => {
@@ -90,6 +136,10 @@ function ChatBot() {
       messagesEndRef.current.scrollTop = messagesEndRef.current.scrollHeight;
     }
   }, [messages]);
+
+  if (!bidData) {
+    return <p>데이터 로딩 중...</p>;
+  }
 
   return (
     <div className="w-full px-4">
