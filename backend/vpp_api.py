@@ -82,8 +82,6 @@ class ActionEnum(str, Enum):
     TIMEOUT = "timeout"
 
 # 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
-
-
 def is_timeout():
     korea = pytz.timezone("Asia/Seoul")
     now = datetime.now(korea)
@@ -92,7 +90,6 @@ def is_timeout():
     timeout_time = start_time + timedelta(minutes=14)
 
     return now > timeout_time
-
 
 # 메모리 저장소
 node_status_storage = []
