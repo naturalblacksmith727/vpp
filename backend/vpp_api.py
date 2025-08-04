@@ -334,7 +334,7 @@ def get_bidding_result():
         )
             """
             cursor.execute(sql)
-            result = cursor.fetchone()
+            result = cursor.fetchall()
         conn.close()
 
         if result is None:
