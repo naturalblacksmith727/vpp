@@ -1,3 +1,4 @@
+import traceback  # 파일 상단에 추가
 from flask import Flask, request, jsonify, Blueprint
 from datetime import datetime, timedelta
 import pytz
@@ -5,6 +6,7 @@ import pymysql
 import json
 from flask_cors import CORS
 from enum import Enum
+
 
 def get_connection():
     conn = pymysql.connect(
@@ -61,20 +63,33 @@ RELAY_TYPE = {
     5: "wind"
 }
 ENTITY_TYPE = {
-    1:"태양광",
-    2:"풍력",
-    3:"배터리"
+    1: "태양광",
+    2: "풍력",
+    3: "배터리"
 }
 
 #  PUT/fr_serv/bid_edit_fix 에서 사용할 enum 클래스
+
+
 class StatusEnum(str, Enum):
     SUCCESS = "success"
     FAILED = "failed"
+
 
 class ActionEnum(str, Enum):
     EDIT = "edit"
     CONFIRM = "confirm"
     TIMEOUT = "timeout"
+
+# 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
+def is_timeout():
+    korea = pytz.timezone("Asia/Seoul")
+    now = datetime.now(korea)
+    minute = (now.minute // 15) * 15
+    start_time = now.replace(minute=minute, second=0, microsecond=0)
+    timeout_time = start_time + timedelta(minutes=14)
+
+    return now > timeout_time
 
 # 메모리 저장소
 node_status_storage = []
@@ -119,11 +134,12 @@ def get_node_result():
             rows = cursor.fetchall()
 
             if rows:
-                data["solar"]= [{"timestamp":row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'),"power_kw":row["power_kw"]} for row in rows]
+                data["solar"] = [{"timestamp": row["timestamp"].strftime(
+                    '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
             else:
-                return jsonify({"status":"failed", "data":None, "timestamp":None, "fail_reason": "no_data_available"})
+                return jsonify({"status": "failed", "data": None, "timestamp": None, "fail_reason": "no_data_available"})
 
-            #풍력 시간별 전력량
+            # 풍력 시간별 전력량
             sql = """
             SELECT node_timestamp AS timestamp, ROUND(SUM(power_kw),2) AS power_kw
             FROM node_status_log
@@ -135,10 +151,11 @@ def get_node_result():
             rows = cursor.fetchall()
 
             if rows:
-                data["wind"] = [{"timestamp":row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'),"power_kw":row["power_kw"]} for row in rows]
+                data["wind"] = [{"timestamp": row["timestamp"].strftime(
+                    '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
             else:
-                return jsonify({"status":"failed", "data":None, "timestamp":None, "fail_reason": "no_data_available"})
-            
+                return jsonify({"status": "failed", "data": None, "timestamp": None, "fail_reason": "no_data_available"})
+
             # 배터리 시간별 전력량 (relay_id 4,5는 더하고 3은 뺌)
             sql = """
             SELECT charging.timestamp AS timestamp, ROUND(charging.power_kw - COALESCE(usaged.power_kw,0),2) AS power_kw
@@ -162,9 +179,10 @@ def get_node_result():
             rows = cursor.fetchall()
 
             if rows:
-                data["battery"]= [{"timestamp":row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'),"power_kw":row["power_kw"]} for row in rows]
+                data["battery"] = [{"timestamp": row["timestamp"].strftime(
+                    '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
             else:
-                return jsonify({"status":"failed", "data":None, "timestamp":None, "fail_reason": "no_data_available"})
+                return jsonify({"status": "failed", "data": None, "timestamp": None, "fail_reason": "no_data_available"})
 
             return jsonify({
                 "status": "success",
@@ -327,8 +345,10 @@ def get_bidding_result():
             "bid": None,
             "fail_reason": "server_error"
         })
-    
+
 # 5. PUT/bid_edit_fix: 사용자 응답 처리 및 최종 입찰 확정(프론트엔드->서버)
+
+
 @vpp_blueprint.route('/fr_serv/bid_edit_fix', methods=['PUT'])
 def put_edit_fix():
     data = request.get_json(silent=True) or {}
@@ -338,39 +358,13 @@ def put_edit_fix():
     # ---------------------
     # [1] 타임아웃 처리
     # ---------------------
-    if action == "timeout":
-        try:
-            conn = get_connection()
-            with conn.cursor() as cursor:
-                # 1-1. LLM이 제안한 최근 입찰안이 있는지 확인
-                cursor.execute("""
-                    SELECT *
-                    FROM bidding_log
-                    WHERE bid_time = (
-                        SELECT MAX(bid_time) FROM bidding_log
-                    )
-                """)
-                auto_bid = cursor.fetchone()
+    if is_timeout():
+        return jsonify({
+            "status": StatusEnum.FAILED,
+            "action": ActionEnum.TIMEOUT,
+            "fail_reason": "Timeout processing failed: Could not write default bid"
+        })
 
-                if not auto_bid:
-                    # LLM 입찰 제안이 아예 없을 경우
-                    return jsonify({
-                        "status": StatusEnum.FAILED,
-                        "action": action,
-                        "fail_reason": "Timeout fallback failed: No auto-generated bid found"
-                    })
-            return jsonify({
-                "status": StatusEnum.SUCCESS,
-                "action": action,
-                "fail_reason": None
-            })
-        except Exception:
-            return jsonify({
-                "status": StatusEnum.FAILED,
-                "action": action,
-                "fail_reason": "Timeout processing failed: Could not write default bid"
-            })
-    
     # ---------------------
     # [2] confirm (수정 없이 진행)
     # ---------------------
@@ -392,7 +386,7 @@ def put_edit_fix():
                         "action": action,
                         "fail_reason": "Cannot confirm: No existing bid data found"
                     })
-            
+
                 return jsonify({
                     "status": StatusEnum.SUCCESS,
                     "action": action,
@@ -414,7 +408,7 @@ def put_edit_fix():
             return jsonify({
                 "status": "failed",
                 "action": action,
-                "fail_reason": "Missing bid data: Price or entity not provided"   
+                "fail_reason": "Missing bid data: Price or entity not provided"
             })
 
         entity_name = bid["entity_name"]
@@ -430,7 +424,7 @@ def put_edit_fix():
                 "action": action,
                 "fail_reason": "Invalid entity: Must be one of ['태양광', '풍력', '배터리']"
             })
-        
+
         try:
             conn = get_connection()
 
@@ -463,7 +457,7 @@ def put_edit_fix():
                         WHERE entity_id = %s
                         ORDER BY bid_time DESC
                         LIMIT 1
-                    """,(entity_id,))
+                    """, (entity_id,))
                     last_row = cursor.fetchone()
 
                     cursor.execute("""
@@ -477,21 +471,21 @@ def put_edit_fix():
                 # edit, confirm, timeout
                 return jsonify({
                     "status": StatusEnum.SUCCESS,
-                    "action": action,  
+                    "action": action,
                     "fail_reason": None
-                    })
+                })
 
         except Exception as e:
-            return jsonify({ 
-                "status": StatusEnum.FAILED, 
+            return jsonify({
+                "status": StatusEnum.FAILED,
                 "action": action,
-                "fail_reason": "Failed to save user edit: Database error" 
-                })
+                "fail_reason": "Failed to save user edit: Database error"
+            })
     else:
         return jsonify({
             "status": StatusEnum.FAILED,
             "action": action,
-            "fail_reason": "Internal server error while processing user response"  
+            "fail_reason": "Internal server error while processing user response"
         })
 # --------------------------------------------------------------------------------
 # LLM <-> 서버
@@ -499,6 +493,8 @@ def put_edit_fix():
 
 # 1. GET/get_smp: SMP 데이터 요청 (LLM -> 서버)
 # 15분마다 smp 데이터 가져오기
+
+
 def fetch_smp_for_time_blocks(base_time):
     try:
         conn = get_connection()
@@ -787,6 +783,9 @@ def get_node_status():
 # --------------------------------------------------------------------------------
 
 # 1. POST/node_status: 아두이노 상태 전송 (ardu -> serv)
+
+# 1. POST/node_status: 아두이노 상태 전송 (ardu -> serv)
+
 @vpp_blueprint.route("/ardu_serv/node_status", methods=["POST"])
 def receive_node_status():
     try:
@@ -832,23 +831,33 @@ def receive_node_status():
 
             # 새로 삽입된 레코드의 timestamp 조회
             cursor.execute(
-                "SELECT node_timestamp FROM node_status_log WHERE id = LAST_INSERT_ID()")
-            node_timestamp = cursor.fetchone()[0]
+                "SELECT node_timestamp FROM node_status_log WHERE id = LAST_INSERT_ID()"
+            )
+            result = cursor.fetchone()
+
+            if result:
+                # DictCursor인 경우와 튜플 커서인 경우 둘 다 대응
+                node_timestamp = result["node_timestamp"] if isinstance(
+                    result, dict) else result[0]
+            else:
+                node_timestamp = None
 
         conn.commit()
         conn.close()
 
         return jsonify({
             "result": "Success",
-            "node_timestamp": node_timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "node_timestamp": node_timestamp.strftime("%Y-%m-%d %H:%M:%S") if node_timestamp else None,
             "reason": None
         })
 
     except Exception as e:
+        print("Error in /ardu_serv/node_status:", e)
+        traceback.print_exc()
         return jsonify({
             "result": "failed",
             "node_timestamp": None,
-            "reason": "Unexpected server error"
+            "reason": f"Unexpected server error: {str(e)}"
         })
 
 
