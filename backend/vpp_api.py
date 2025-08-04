@@ -70,7 +70,6 @@ ENTITY_TYPE = {
 
 #  PUT/fr_serv/bid_edit_fix 에서 사용할 enum 클래스
 
-
 class StatusEnum(str, Enum):
     SUCCESS = "success"
     FAILED = "failed"
@@ -82,6 +81,8 @@ class ActionEnum(str, Enum):
     TIMEOUT = "timeout"
 
 # 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
+
+
 def is_timeout():
     korea = pytz.timezone("Asia/Seoul")
     now = datetime.now(korea)
@@ -90,6 +91,20 @@ def is_timeout():
     timeout_time = start_time + timedelta(minutes=14)
 
     return now > timeout_time
+
+
+# 가장 가까운 15분 단위로 반올림
+def round_to_nearest_15min(dt: datetime = None):
+    if dt is None:
+        dt = datetime.now()
+    discard = timedelta(minutes=dt.minute % 15,
+                        seconds=dt.second,
+                        microseconds=dt.microsecond)
+    dt -= discard
+    if discard >= timedelta(minutes=7.5):
+        dt += timedelta(minutes=15)
+    return dt.replace(second=0, microsecond=0)
+
 
 # 메모리 저장소
 node_status_storage = []
@@ -549,10 +564,10 @@ def fetch_smp_for_time_blocks(base_time):
 
 @vpp_blueprint.route("/llm_serv/get_smp", methods=["GET"])
 def get_smp():
-    now = datetime.now().replace(second=0, microsecond=0)
-    base_time = now
+    # 🔄 15분 단위로 정렬된 시각 사용
+    base_time = round_to_nearest_15min()
 
-    print(f"[fetch_smp] base_time: {base_time}")
+    print(f"[fetch_smp] base_time (rounded): {base_time}")
 
     smp_result = fetch_smp_for_time_blocks(base_time)
 
@@ -641,19 +656,19 @@ def generate_bid():
         cursor.close()
         conn.close()
 
-        return jsonify({"result": "success", "message": "입찰 전략 저장 완료"}), 200
+        return jsonify({"result": "success", "message": "입찰 전략 저장 완료"}), 100
 
     except (ValueError, KeyError, TypeError) as e:
         print("❌ 데이터 오류:", str(e))
-        return jsonify({"result": "Failed", "reason": "empty_bid_list"}), 400
+        return jsonify({"result": "Failed", "reason": "empty_bid_list"}), 200
 
     except pymysql.err.IntegrityError as e:
         print("❌ IntegrityError:", e)
-        return jsonify({"result": "Failed", "reason": f"sql_insert_error: {str(e)}"}), 500
+        return jsonify({"result": "Failed", "reason": f"sql_insert_error: {str(e)}"}), 300
 
     except pymysql.err.OperationalError as e:
         print("❌ OperationalError:", e)
-        return jsonify({"result": "Failed", "reason": "db_connection_error"}), 500
+        return jsonify({"result": "Failed", "reason": "db_connection_error"}), 400
 
     except Exception as e:
         print("❌ Unknown Error:", e)
