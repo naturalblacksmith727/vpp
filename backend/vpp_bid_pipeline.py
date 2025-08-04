@@ -2,7 +2,7 @@ import requests
 import json, re
 import time
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema import SystemMessage, HumanMessage
@@ -19,6 +19,13 @@ KEY_MAPPING = {
     'bid_price': 'bid_price_per_kwh',
     'strategy_reason': 'llm_reasoning',
     'recommendation': 'recommendation'
+}
+
+# ✅ 키 변환 매핑 (AI 결과 → DB 컬럼명 중 entity)
+RESOURCE_TO_ENTITY_ID = {
+    "태양광": 1,
+    "풍력": 2,
+    "배터리": 3
 }
 
 # ✅ 날씨 키 매핑 (영→한)
@@ -53,6 +60,29 @@ def extract_json_from_text(text: str):
     json_str = max(json_blocks, key=len)
     return json_str
 
+def sleep_until_next_quarter():
+    now = datetime.now()
+    # 분 단위를 15로 나눈 뒤 다음 배수로 반올림
+    minute = (now.minute // 15 + 1) * 15
+    if minute == 60:
+        next_time = now.replace(hour=(now.hour + 1) % 24, minute=0, second=0, microsecond=0)
+    else:
+        next_time = now.replace(minute=minute, second=0, microsecond=0)
+
+    sleep_seconds = (next_time - now).total_seconds()
+    print(f"🕒 다음 입찰까지 {int(sleep_seconds)}초 대기합니다.")
+    time.sleep(sleep_seconds)
+
+def round_to_nearest_15min(dt: datetime = None):
+    if not dt:
+        dt = datetime.now()
+    discard = timedelta(minutes=dt.minute % 15,
+                        seconds=dt.second,
+                        microseconds=dt.microsecond)
+    dt -= discard
+    if discard >= timedelta(minutes=7.5):
+        dt += timedelta(minutes=15)
+    return dt.replace(second=0, microsecond=0)
 
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -70,8 +100,6 @@ from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, H
 
 
 def summarize_node_and_weather(node_status, weather, llm):
-    import json
-    import re
 
     # 1️⃣ 전달용 JSON 생성
     resource_data = json.dumps({'node': node_status, 'weather': weather}, ensure_ascii=False)
@@ -167,11 +195,13 @@ def summarize_node_and_weather(node_status, weather, llm):
 
 
 def summarize_smp(smp_data, llm):
-    # Step 1: JSON 생성 프롬프트
-    prompt_json = [
-        {"role": "system", "content": "너는 VPP 시장 입찰 분석 전문가야."},
-        {"role": "user", "content": f"""
-다음은 최근 SMP 시장 정보야. 아래 예시처럼 JSON 형식으로만 요약해줘. 설명은 하지 말고 JSON만 줘.
+    try:
+        # 1️⃣ JSON만 생성하는 프롬프트
+        prompt_json = ChatPromptTemplate.from_messages([
+            SystemMessage("너는 VPP 시장 입찰 분석 전문가야."),
+            HumanMessage(f"""
+다음은 최근 SMP 시장 정보야. 아래 예시처럼 **JSON 형식으로만** 요약해줘.
+설명은 절대 포함하지 마.
 
 예시:
 {{
@@ -183,28 +213,33 @@ def summarize_smp(smp_data, llm):
 
 데이터:
 {smp_data}
-"""}
-    ]
+""")
+        ])
 
-    # 1) JSON 생성 요청
-    res_json = llm(prompt_json)
-    content_json = res_json['choices'][0]['message']['content'].strip()
+        # 2️⃣ LLM 호출
+        res = llm(prompt_json.format_messages())
+        print("✅ LLM 응답 원문 ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+        print(res.content)
+        print("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
 
-    # 2) JSON 추출
-    try:
-        json_match = re.search(r'(\{.*\})', content_json, re.DOTALL)
-        if not json_match:
-            raise ValueError("JSON 형식을 응답에서 찾지 못했습니다.")
-        smp_json = json.loads(json_match.group(1))
-    except Exception as e:
-        print("❌ SMP JSON 파싱 실패:", e)
-        raise
+        # 3️⃣ JSON 파싱
+        try:
+            smp_json = json.loads(res.content)
+        except json.JSONDecodeError:
+            json_match = re.search(r'(\{.*\})', res.content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+                smp_json = json.loads(json_str)
+            else:
+                raise ValueError("SMP 응답에서 JSON을 추출하지 못했습니다.")
 
-    # Step 2: 요약문 생성 프롬프트
-    json_text = json.dumps(smp_json, ensure_ascii=False, indent=2)
-    prompt_summary = [
-        {"role": "system", "content": "너는 VPP 시장 입찰 분석 전문가야."},
-        {"role": "user", "content": f"""
+        print("✅ 추출된 SMP 요약 JSON:", smp_json)
+
+        # 4️⃣ 요약문 생성 프롬프트
+        json_text = json.dumps(smp_json, ensure_ascii=False, indent=2)
+        prompt_summary = ChatPromptTemplate.from_messages([
+            SystemMessage("너는 VPP 시장 입찰 분석 전문가야."),
+            HumanMessage(f"""
 주어진 JSON 데이터를 바탕으로 자연스럽고 간결한 한글 요약문을 작성해줘.
 - 최근 평균과 오늘 SMP 비교
 - 상승/하락 등 추세 언급
@@ -217,22 +252,28 @@ def summarize_smp(smp_data, llm):
 
 데이터:
 {json_text}
-"""}
-    ]
+""")
+        ])
 
-    # 3) 요약문 요청
-    res_summary = llm(prompt_summary, smp_json)
-    summary_text = res_summary['choices'][0]['message']['content'].strip()
+        res_summary = llm(prompt_summary.format_messages())
+        summary_text = res_summary.content.strip()
 
-    return smp_json, summary_text
+        print("📄 SMP 요약문:\n", summary_text)
+
+        return smp_json, summary_text
+
+    except Exception as e:
+        print("❌ summarize_smp 실패:", e)
+        raise
 
 
 
-# ✅ Step 3 프롬프트 (입찰 전략 생성)
-def generate_bid_strategy(resource_json, market_json):
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content="너는 VPP 입찰 전략 전문가야."),
-        HumanMessage(content=f"""
+def generate_bid_strategy(resource_json, market_json, llm):
+    try:
+        # 프롬프트 구성
+        prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content="너는 VPP 입찰 전략 전문가야."),
+            HumanMessage(content=f"""
 아래 자원 상태와 시장 분석을 바탕으로, 자원별 입찰 전략을 수립해줘.  
 각 자원에 대해 다음 정보를 아래 순서대로 JSON으로 출력하고, 요약문도 함께 작성해줘.
 
@@ -259,13 +300,29 @@ def generate_bid_strategy(resource_json, market_json):
   }},
   ...
 ]
-📄 요약문:
-...
 """)
-    ])
-    res = llm(prompt.format_messages())
-    split = res.content.strip().split("\n", 1)
-    return json.loads(split[0]), split[1] if len(split) > 1 else ""
+        ])
+
+        # LLM 호출
+        res = llm(prompt.format_messages())
+        raw_text = res.content.strip()
+
+        print("✅ 입찰 전략 원문:\n", raw_text)
+
+        # JSON 분리 시도
+        json_match = re.search(r'(\[\s*\{.*?\}\s*\])', raw_text, re.DOTALL)
+        if not json_match:
+            raise ValueError("입찰 전략 JSON을 추출할 수 없습니다.")
+
+        bid_json = json.loads(json_match.group(1))
+        summary_text = raw_text.replace(json_match.group(1), "").strip()
+
+        return bid_json, summary_text
+
+    except Exception as e:
+        print("❌ generate_bid_strategy 실패:", e)
+        raise
+
 
 # ✅ 안전한 JSON 파싱 함수
 def safe_json(response, step_name=""):
@@ -283,10 +340,9 @@ def safe_json(response, step_name=""):
 # ✅ 자동 입찰 파이프라인 실행 함수
 def run_bid_pipeline():
     while True:
-        now = datetime.now()
-        bid_time = now.strftime('%Y-%m-%d %H:%M:00')
-        bid_id = now.strftime('%Y%m%d%H%M')
-        print(f"\n🚀 실행 시각: {bid_time}")
+        rounded_now = round_to_nearest_15min()
+        bid_time = rounded_now.strftime('%Y-%m-%d %H:%M:00')
+        print(f"\n🚀 입찰 파이프라인 실행 시각 (15분 단위 정렬): {bid_time}")
 
         try:
             # Step1 응답 원문 출력
@@ -365,12 +421,14 @@ def run_bid_pipeline():
                 raise ValueError(f"Step2 실패: {smp_data_raw.get('reason')}")
 
             smp_data = json.dumps(smp_data_raw["smp_data"], ensure_ascii=False, indent=2)
+            print("📄 Step2 SMP 원본 데이터:\n", smp_data)
+
             smp_summary, smp_text = summarize_smp(smp_data, llm)
             print("📦 Step2 결과:", smp_summary)
             print("📄 Step2 요약:", smp_text)
 
             # Step 3: 입찰 전략
-            bid_result, bid_summary = generate_bid_strategy(res_summary, smp_summary)
+            bid_result, bid_summary = generate_bid_strategy(res_summary, smp_summary, llm)
             print("📦 Step3 결과:", bid_result)
             print("📄 Step3 요약:", bid_summary)
 
@@ -378,27 +436,44 @@ def run_bid_pipeline():
             converted_bids = []
             for bid in bid_result:
                 converted = {}
-                for key, value in bid.items():
-                    new_key = KEY_MAPPING.get(key, key)
-                    converted[new_key] = value
+
+                # entity_id 추가
+                resource_name = bid.get("resource")
+                if resource_name not in RESOURCE_TO_ENTITY_ID:
+                    print(f"❌ 알 수 없는 리소스명: {resource_name}")
+                    continue  # 잘못된 자원은 스킵
+
+                converted["entity_id"] = RESOURCE_TO_ENTITY_ID[resource_name]
+
+                # 나머지 키 변환
+                for old_key, new_key in KEY_MAPPING.items():
+                    if old_key in bid:
+                        converted[new_key] = bid[old_key]
+
                 converted_bids.append(converted)
+                print("최종 입찰 형태: ", converted_bids)
 
             # Step 3-1: DB 전송
             res = requests.post("http://127.0.0.1:5001/llm_serv/generate_bid", json={
                 "bid_time": bid_time,
-                "bid_id": bid_id,
                 "bids": converted_bids
             })
+
+            print("📡 서버 응답 코드:", res.status_code)
+            print("📡 서버 응답 내용:", res.text)
 
             if res.ok:
                 print("✅ 입찰 전략 전송 성공")
             else:
-                print(f"❌ 입찰 전송 실패: {res.text}")
+                print(f"❌ 입찰 전송 실패")
 
         except Exception as e:
             print(f"❌ 오류 발생: {e}")
 
-        time.sleep(900)  # 15분 대기
+        
+        finally:
+            sleep_until_next_quarter()
+
 
 # ✅ 메인 실행
 if __name__ == '__main__':
