@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from "react";
 
 function ChatBot() {
   const [bidData, setBidData] = useState(null);
+  const [resultData, setResultData] = useState(null);
   const [error, setError] = useState(null);
   const lastMinuteRef = useRef(null); // 시간 확인용
 
@@ -25,15 +26,31 @@ function ChatBot() {
 
   const messagesEndRef = useRef(null);
   const timeoutTimerRef = useRef(null); // 타임아웃 타이머
+  const awaitingEditInputRef = useRef(false); // "수정하고진행" 상태 확인용
 
   useEffect(() => {
     const fetchData = () => {
       axios
         .get("https://aivpp.duckdns.org/api/serv_fr/generate_bid")
-        //.get("127.0.0.1:5001/serv_fr/generate_bid")
+        //.get("/api/serv_fr/generate_bid")
         .then((response) => {
           if (response.data.fail_reason === null) {
             setBidData(response.data);
+          } else {
+            setError("데이터를 가져오지 못했습니다.");
+          }
+        })
+        .catch((err) => {
+          console.error(err);
+          setError("서버 연결에 실패했습니다.");
+        });
+
+      axios
+        .get("https://aivpp.duckdns.org/api/serv_fr/bidding_result")
+        //.get("/api/serv_fr/bidding_result")
+        .then((response) => {
+          if (response.data.status === "success") {
+            setResultData(response.data);
           } else {
             setError("데이터를 가져오지 못했습니다.");
           }
@@ -57,6 +74,7 @@ function ChatBot() {
     try {
       const response = await axios.put(
         "https://aivpp.duckdns.org/api/fr_serv/bid_edit_fix",
+        //"/api/fr_serv/bid_edit_fix",
         {
           action,
           bid,
@@ -74,6 +92,7 @@ function ChatBot() {
 
     // 사용자 메시지 추가
     const userInput = input.trim();
+    const normalizedInput = userInput.replace(/\s+/g, ""); // 공백제거
     setMessages((prev) => [...prev, { sender: "user", text: userInput }]);
     setInput("");
 
@@ -88,8 +107,69 @@ function ChatBot() {
     // 봇의 실제 답변 내용
     setTimeout(() => {
       (async () => {
+        if (awaitingEditInputRef.current) {
+          // === 2단계: 사용자가 수정입력한 경우 ===
+          const match = input.trim().match(/(태양광|풍력|배터리)\s*(\d+)/);
+          if (match) {
+            const nameToId = { 태양광: 1, 풍력: 2, 배터리: 3 };
+            const entity_name = match[1];
+            const entity_id = nameToId[entity_name];
+            const price = parseFloat(match[2]);
+
+            // entity_id로 bidData.bids 배열에서 해당 항목을 찾는다
+            const matchedBid = bidData.bids.find(
+              (b) => b.entity_id === entity_id
+            );
+
+            if (!matchedBid) {
+              console.error("해당 entity_id에 대한 입찰 정보가 없습니다.");
+              return;
+            }
+            const edit_result = await sendBidEditFix("edit", {
+              id: matchedBid.id,
+              entity_id,
+              entity_name,
+              bid_price_per_kwh: price,
+            });
+
+            // 상태 종료
+            awaitingEditInputRef.current = false;
+
+            setMessages((prev) => [
+              ...prev.slice(0, -1),
+              {
+                sender: "bot",
+                text:
+                  edit_result.status === "success"
+                    ? `입찰가 수정 완료: [${entity_name}] → ${price}원/kWh`
+                    : `수정 실패: ${edit_result.fail_reason}`,
+                timestamp: new Date().toLocaleTimeString("ko-KR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+              },
+            ]);
+          } else {
+            awaitingEditInputRef.current = false;
+            setMessages((prev) => [
+              ...prev.slice(0, -1),
+              {
+                sender: "bot",
+                text: "형식이 잘못되었습니다. 예: '태양광 130'",
+                timestamp: new Date().toLocaleTimeString("ko-KR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+              },
+            ]);
+          }
+          return; // 2단계 입력은 여기서 종료
+        }
         // 수정 없이 진행 입력시
-        if (userInput == "수정 없이 진행") {
+        if (normalizedInput == "수정없이진행") {
+          // 이전 타이머 제거
+          if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+
           const result = await sendBidEditFix("confirm");
 
           setMessages((prev) => {
@@ -107,7 +187,26 @@ function ChatBot() {
             };
             return newMessages;
           });
-        } else if (userInput == "수정하고 진행") {
+        }
+        // === 수정하고진행 (1단계) ===
+        else if (normalizedInput == "수정하고진행") {
+          // 이전 타이머 제거
+          if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+
+          awaitingEditInputRef.current = true;
+
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1] = {
+              sender: "bot",
+              text: "수정할 항목을 입력해주세요. 예: '태양광 130', '풍력 0(입찰 거부)', '배터리 100'",
+              timestamp: new Date().toLocaleTimeString("ko-KR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            };
+            return newMessages;
+          });
         }
         // 아무거나 입력했을시 출력
         else {
@@ -135,7 +234,12 @@ function ChatBot() {
 
       // 00, 15, 30, 45분만, 중복 방지
       if (
-        [0, 15, 30, 45].includes(minutes) &&
+        [
+          0, 15, 30, 45, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17,
+          18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 31, 32, 33, 34, 35,
+          36, 37, 38, 39, 40, 41, 42, 43, 44, 46, 47, 48, 49, 50, 51, 52, 53,
+          54, 56, 57, 58, 59,
+        ].includes(minutes) &&
         lastMinuteRef.current !== minutes &&
         bidData
       ) {
@@ -174,7 +278,7 @@ function ChatBot() {
         // === 타임아웃 타이머 설정 ===
         // 이전 타이머 제거
         if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
-        // 60초 후 타임아웃 전송
+        // 5분 후 타임아웃 전송
         timeoutTimerRef.current = setTimeout(async () => {
           const result = await sendBidEditFix("timeout");
 
@@ -184,15 +288,15 @@ function ChatBot() {
               sender: "bot",
               text:
                 result.status === "success"
-                  ? "응답이 없어 기본 입찰로 진행했습니다."
-                  : `타임아웃 처리 실패: ${result.fail_reason}`,
+                  ? "응답이 없어 추천된 입찰을 모두 거부하였습니다."
+                  : `타임아웃 처리 실패: ${result.fail_reason}, ${result.action}`,
               timestamp: new Date().toLocaleTimeString("ko-KR", {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
             },
           ]);
-        }, 60000); // 60초 후 타임아웃
+        }, 60000); // 5분 후 타임아웃
       }
     };
 

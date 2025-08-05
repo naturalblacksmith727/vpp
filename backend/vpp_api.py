@@ -251,9 +251,10 @@ def get_generate_bid():
         conn = get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
-                SELECT entity_id, bid_time, bid_price_per_kwh, bid_quantity_kwh, llm_reasoning
+                SELECT *
                 FROM bidding_log
                 ORDER BY bid_time DESC
+                LIMIT 3
             """
             cursor.execute(sql)
             bids = cursor.fetchall()
@@ -268,6 +269,7 @@ def get_generate_bid():
         result = []
         for bid in bids:
             result.append({
+                "id":bid["id"],
                 "entity_id": bid["entity_id"],
                 "bid_time": bid["bid_time"].strftime("%Y-%m-%d %H:%M:%S"),
                 "bid_price_per_kwh": bid["bid_price_per_kwh"],
@@ -410,13 +412,14 @@ def put_edit_fix():
     # ---------------------
     elif action == "edit":
         # 데이터 누락
-        if not bid or "entity_name" not in bid or "bid_price_per_kwh" not in bid:
+        if not bid or "id" not in bid or "bid_price_per_kwh" not in bid:
             return jsonify({
                 "status": "failed",
                 "action": action,
                 "fail_reason": "Missing bid data: Price or entity not provided"   
             })
 
+        bid_id = bid["id"]
         entity_name = bid["entity_name"]
         new_price = bid["bid_price_per_kwh"]
 
@@ -487,6 +490,7 @@ def put_edit_fix():
                 "action": action,
                 "fail_reason": "Failed to save user edit: Database error" 
                 })
+    
     else:
         return jsonify({
             "status": StatusEnum.FAILED,
