@@ -109,31 +109,52 @@ function ChatBot() {
       (async () => {
         if (awaitingEditInputRef.current) {
           // === 2단계: 사용자가 수정입력한 경우 ===
-          const match = input.trim().match(/(태양광|풍력|배터리)\s*(\d+)/);
-          if (match) {
+          const matchAll = input
+            .trim()
+            .matchAll(/(태양광|풍력|배터리)\s*(\d+)/g);
+          const matches = Array.from(matchAll);
+
+          if (matches.lenth > 0) {
             const nameToId = { 태양광: 1, 풍력: 2, 배터리: 3 };
-            const entity_name = match[1];
-            const entity_id = nameToId[entity_name];
-            const price = parseFloat(match[2]);
+            const editBids = matches
+              .map(([_, entity_name, priceStr]) => {
+                const entity_id = nameToId[entity_name];
+                const matchedBid = bidData.bids.find((b) => b.id === id);
+                return matchedBid
+                  ? {
+                      id: matchedBid.id,
+                      entity_name,
+                      entity_id,
+                      bid_price_per_kwh: parseFloat(priceStr),
+                    }
+                  : null;
+              })
+              .filter((b) => b !== null); // 매칭 실패한 항목 제거
 
-            // entity_id로 bidData.bids 배열에서 해당 항목을 찾는다
-            const matchedBid = bidData.bids.find(
-              (b) => b.entity_id === entity_id
-            );
-
-            if (!matchedBid) {
-              console.error("해당 entity_id에 대한 입찰 정보가 없습니다.");
+            if (editBids.length === 0) {
+              awaitingEditInputRef.current = false;
+              setMessages((prev) => [
+                ...prev.slice(0, -1),
+                {
+                  sender: "bot",
+                  text: "입력한 항목에 해당하는 입찰 정보가 없습니다.",
+                  timestamp: new Date().toLocaleTimeString("ko-KR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                },
+              ]);
               return;
             }
-            const edit_result = await sendBidEditFix("edit", {
-              id: matchedBid.id,
-              entity_id,
-              entity_name,
-              bid_price_per_kwh: price,
-            });
+
+            const edit_result = await sendBidEditFix("edit", editBids);
 
             // 상태 종료
             awaitingEditInputRef.current = false;
+
+            const successText = editBids
+              .map((b) => `[${b.entity_name}] → ${b.bid_price_per_kwh}원/kWh`)
+              .join("\n");
 
             setMessages((prev) => [
               ...prev.slice(0, -1),
@@ -141,7 +162,7 @@ function ChatBot() {
                 sender: "bot",
                 text:
                   edit_result.status === "success"
-                    ? `입찰가 수정 완료: [${entity_name}] → ${price}원/kWh`
+                    ? `입찰가 수정 완료:\n${successText}`
                     : `수정 실패: ${edit_result.fail_reason}`,
                 timestamp: new Date().toLocaleTimeString("ko-KR", {
                   hour: "2-digit",
@@ -199,7 +220,7 @@ function ChatBot() {
             const newMessages = [...prev];
             newMessages[newMessages.length - 1] = {
               sender: "bot",
-              text: "수정할 항목을 입력해주세요. 예: '태양광 130', '풍력 0(입찰 거부)', '배터리 100'",
+              text: "수정할 항목을 입력해주세요. 예: 태양광 130, 풍력 40, 배터리 0 (입찰 거부시 0으로 표시)",
               timestamp: new Date().toLocaleTimeString("ko-KR", {
                 hour: "2-digit",
                 minute: "2-digit",

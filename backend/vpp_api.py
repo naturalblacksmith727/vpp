@@ -370,7 +370,7 @@ def get_bidding_result():
 def put_edit_fix():
     data = request.get_json(silent=True) or {}
     action = data.get("action", "").strip().lower()
-    bid = data.get("bid", None)
+    bids = data.get("bids", None)
 
     # ---------------------
     # [1] 타임아웃 처리
@@ -421,68 +421,51 @@ def put_edit_fix():
     # ---------------------
     elif action == "edit":
         # 데이터 누락
-        if not bid or "id" not in bid or "bid_price_per_kwh" not in bid:
+        if not bids or not isinstance(bids, list):
             return jsonify({
                 "status": "failed",
                 "action": action,
                 "fail_reason": "Missing bid data: Price or entity not provided"
             })
 
-        bid_id = bid["id"]
-        entity_name = bid["entity_name"]
-        new_price = bid["bid_price_per_kwh"]
-
         ENTITY_NAME_TO_ID = {"태양광": 1, "풍력": 2, "배터리": 3}
-        target_entity_id = ENTITY_NAME_TO_ID.get(entity_name)
-
-        # 허용되지 않은 entity
-        if target_entity_id is None:
-            return jsonify({
-                "status": "failed",
-                "action": action,
-                "fail_reason": "Invalid entity: Must be one of ['태양광', '풍력', '배터리']"
-            })
 
         try:
             conn = get_connection()
 
             with conn.cursor() as cursor:
-                sql = """
-                SELECT *
-                FROM bidding_log
-                WHERE entity_id IN (1,2,3)
-                ORDER BY bid_time DESC 
-                LIMIT 3
-                """
-                cursor.execute(sql)
+                for bid in bids:
+                    bid_id = bid["id"]
+                    entity_name = bid["entity_name"]
+                    new_price = bid["bid_price_per_kwh"]
 
-                rows = cursor.fetchall()
+                    target_entity_id = ENTITY_NAME_TO_ID.get(entity_name)
 
-                for row in rows:
-                    entity_id = row["entity_id"]
-                    old_price = row["bid_price_per_kwh"]
+                    # 허용되지 않은 entity
+                    if target_entity_id is None:
+                        return jsonify({
+                            "status": "failed",
+                            "action": action,
+                            "fail_reason": "Invalid entity: Must be one of ['태양광', '풍력', '배터리']"
+                        })
 
-                    # 프론트에서 요청한 entity만 수정
-                    if entity_id == target_entity_id:
-                        update_price = new_price
-                    else:
-                        update_price = old_price  # 그대로 유지
+                    sql = """
+                    SELECT *
+                    FROM bidding_log
+                    WHERE id = bid_id;
+                    LIMIT 1
+                    """
+                    cursor.execute(sql,(bid_id,))
 
-                    # db에 수정된 값들 넣기
-                    cursor.execute("""
-                        SELECT id 
-                        FROM bidding_log
-                        WHERE entity_id = %s
-                        ORDER BY bid_time DESC
-                        LIMIT 1
-                    """, (entity_id,))
-                    last_row = cursor.fetchone()
+                    row = cursor.fetchone()
 
-                    cursor.execute("""
+                    if row:
+                        sql = """
                         UPDATE bidding_log
                         SET bid_price_per_kwh = %s
                         WHERE id = %s
-                    """, (update_price, last_row["id"]))
+                        """
+                        cursor.execute(sql,(new_price, row["id"]))
 
                 conn.commit()
 
