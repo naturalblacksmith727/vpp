@@ -302,7 +302,7 @@ def get_generate_bid():
         result = []
         for bid in bids:
             result.append({
-                "id":bid["id"],
+                "bid_id":bid["bid_id"],
                 "entity_id": bid["entity_id"],
                 "bid_time": bid["bid_time"].strftime("%Y-%m-%d %H:%M:%S"),
                 "bid_price_per_kwh": bid["bid_price_per_kwh"],
@@ -336,23 +336,19 @@ def get_bidding_result():
         )
             """
             cursor.execute(sql)
-            result = cursor.fetchall()
+            results = cursor.fetchall()
         conn.close()
 
-        if result is None:
+        if results is None:
             return jsonify({
                 "status": "success",
                 "bid": None,
                 "fail_reason": "missing_field:bidding_result"
             })
-
+        
         return jsonify({
             "status": "success",
-            "bid": {
-                "entity_id": result["entity_id"],
-                "bid_result": result["result"],
-                "unit_price": result["bid_price"]
-            },
+            "bid": results,
             "fail_reason": None
         })
 
@@ -364,8 +360,6 @@ def get_bidding_result():
         })
 
 # 5. PUT/bid_edit_fix: 사용자 응답 처리 및 최종 입찰 확정(프론트엔드->서버)
-
-
 @vpp_blueprint.route('/fr_serv/bid_edit_fix', methods=['PUT'])
 def put_edit_fix():
     data = request.get_json(silent=True) or {}
@@ -375,12 +369,61 @@ def put_edit_fix():
     # ---------------------
     # [1] 타임아웃 처리
     # ---------------------
-    if is_timeout():
-        return jsonify({
-            "status": StatusEnum.FAILED,
-            "action": ActionEnum.TIMEOUT,
-            "fail_reason": "Timeout processing failed: Could not write default bid"
-        })
+    if action == "timeout":
+        try:
+            conn = get_connection()
+            with conn.cursor() as cursor:
+                # 가장 최근의 bid_time에 해당하는 bid_id 찾기
+                cursor.execute("""
+                    SELECT MAX(bid_time) AS latest_time
+                    FROM bidding_log
+                """)
+                latest_time_row = cursor.fetchone()
+                latest_time = latest_time_row["latest_time"]
+
+                if not latest_time:
+                    return jsonify({
+                        "status": StatusEnum.FAILED,
+                        "action": ActionEnum.TIMEOUT,
+                        "fail_reason": "Timeout failed: No bid data found"
+                    })
+
+                # 최신 시간에 해당하는 bid_id 목록 가져오기
+                cursor.execute("""
+                    SELECT bid_id, entity_id
+                    FROM bidding_log
+                    WHERE bid_time = %s
+                """, (latest_time,))
+                bid_rows = cursor.fetchall()
+
+                if not bid_rows:
+                    return jsonify({
+                        "status": StatusEnum.FAILED,
+                        "action": ActionEnum.TIMEOUT,
+                        "fail_reason": "Timeout failed: No bids to update"
+                    })
+
+                # 각 입찰 항목의 가격을 0으로 업데이트
+                for row in bid_rows:
+                    cursor.execute("""
+                        UPDATE bidding_log
+                        SET bid_price_per_kwh = 0
+                        WHERE bid_id = %s AND entity_id = %s
+                    """, (row["bid_id"], row["entity_id"]))
+
+                conn.commit()
+
+                return jsonify({
+                    "status": StatusEnum.SUCCESS,
+                    "action": ActionEnum.TIMEOUT,
+                    "fail_reason": None
+                })
+        except Exception as e:
+            return jsonify({
+                "status": StatusEnum.FAILED,
+                "action": ActionEnum.TIMEOUT,
+                "fail_reason": "Timeout processing failed: DB error"
+            })
 
     # ---------------------
     # [2] confirm (수정 없이 진행)
@@ -435,7 +478,7 @@ def put_edit_fix():
 
             with conn.cursor() as cursor:
                 for bid in bids:
-                    bid_id = bid["id"]
+                    bid_id = bid["bid_id"]
                     entity_name = bid["entity_name"]
                     new_price = bid["bid_price_per_kwh"]
 
@@ -452,10 +495,9 @@ def put_edit_fix():
                     sql = """
                     SELECT *
                     FROM bidding_log
-                    WHERE id = bid_id;
-                    LIMIT 1
+                    WHERE bid_id = %s and entity_id = %s
                     """
-                    cursor.execute(sql,(bid_id,))
+                    cursor.execute(sql,(bid_id, target_entity_id))
 
                     row = cursor.fetchone()
 
@@ -463,9 +505,9 @@ def put_edit_fix():
                         sql = """
                         UPDATE bidding_log
                         SET bid_price_per_kwh = %s
-                        WHERE id = %s
+                        WHERE bid_id = %s AND entity_id = %s
                         """
-                        cursor.execute(sql,(new_price, row["id"]))
+                        cursor.execute(sql,(new_price, row["bid_id"], target_entity_id))
 
                 conn.commit()
 

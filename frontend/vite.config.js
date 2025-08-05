@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  /*
+
   server: {
     proxy: {
       // 프론트에서 "/api"로 시작하는 요청을 백엔드로 프록시
@@ -14,5 +14,5 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ""), // '/api/xxx' → '/xxx'
       },
     },
-  },*/
+  },
 });
