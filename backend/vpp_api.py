@@ -237,7 +237,7 @@ def get_profit_result():
             total_generation_kwh = cursor.fetchone()
 
             sql = """
-            SELECT ROUND(CAST(SUM(revenue_krw) AS DECIMAL(10,2)), 0) AS total_revenue_krw
+            SELECT ROUND((SUM(revenue_krw)), 1) AS total_revenue_krw
             FROM profit_log
             """
             cursor.execute(sql)

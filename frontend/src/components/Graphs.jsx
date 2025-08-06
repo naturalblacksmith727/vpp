@@ -42,10 +42,10 @@ function Graphs() {
     return () => clearInterval(interval);
   }, []);
 
-  // 시간대별 온도
-  const sunData = nodeData
+  // 시간대별 태양광
+  const solarData = nodeData
     ? nodeData.solar.map((item) => ({
-        시간: item.timestamp.slice(11, 16),
+        시간: item.timestamp.slice(9, 16),
         생산전력량: item.power_kw,
       }))
     : [];
@@ -79,7 +79,7 @@ function Graphs() {
             <LineChart
               width={450}
               height={300}
-              data={sunData}
+              data={solarData}
               margin={{ top: 30, right: 20, bottom: 20, left: 40 }}
             >
               <CartesianGrid
