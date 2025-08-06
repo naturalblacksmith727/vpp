@@ -139,9 +139,10 @@ def get_node_result():
         with conn.cursor() as cursor:
             # 태양광 시간별 전력량
             sql = """
-            SELECT node_timestamp AS timestamp, ROUND(SUM(power_kw),2) AS power_kw
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
             FROM node_status_log
             WHERE relay_id IN (1, 4)
+                AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
             GROUP BY node_timestamp
             ORDER BY node_timestamp;
             """
@@ -156,9 +157,10 @@ def get_node_result():
 
             # 풍력 시간별 전력량
             sql = """
-            SELECT node_timestamp AS timestamp, ROUND(SUM(power_kw),2) AS power_kw
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
             FROM node_status_log
             WHERE relay_id IN (2, 5)
+                AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
             GROUP BY node_timestamp
             ORDER BY node_timestamp;
             """
@@ -179,6 +181,7 @@ def get_node_result():
                     SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
                     FROM node_status_log
                     WHERE relay_id IN (4,5)
+                        AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR
                     GROUP BY node_timestamp
                 ) AS charging
             LEFT JOIN
@@ -186,6 +189,7 @@ def get_node_result():
                     SELECT node_timestamp AS timestamp, power_kw
                     FROM node_status_log
                     WHERE relay_id IN (3)
+                        AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR
                 ) AS usaged
             ON charging.timestamp = usaged.timestamp
             ORDER BY charging.timestamp;
