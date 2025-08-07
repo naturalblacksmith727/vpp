@@ -1,10 +1,8 @@
 import traceback  # 파일 상단에 추가
-from flask import Flask, request, jsonify, Blueprint
+from flask import request, jsonify, Blueprint
 from datetime import datetime, timedelta
 import pytz
 import pymysql
-import json
-from flask_cors import CORS
 from enum import Enum
 
 
