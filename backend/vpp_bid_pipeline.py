@@ -1,6 +1,6 @@
 import requests
 import json, re
-import time
+import time, pytz
 import sys
 from datetime import datetime, timedelta
 from langchain_openai import ChatOpenAI
@@ -8,6 +8,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.schema import SystemMessage, HumanMessage
 
 
+KST = pytz.timezone("Asia/Seoul")
 
 
 # ✅ LLM 초기화
@@ -61,7 +62,7 @@ def extract_json_from_text(text: str):
     return json_str
 
 def sleep_until_next_quarter():
-    now = datetime.now()
+    now = datetime.now(KST)
     # 분 단위를 15로 나눈 뒤 다음 배수로 반올림
     minute = (now.minute // 15 + 1) * 15
     if minute == 60:
@@ -75,7 +76,7 @@ def sleep_until_next_quarter():
 
 def round_to_nearest_15min(dt: datetime = None):
     if not dt:
-        dt = datetime.now()
+        dt = datetime.now(KST)
     discard = timedelta(minutes=dt.minute % 15,
                         seconds=dt.second,
                         microseconds=dt.microsecond)

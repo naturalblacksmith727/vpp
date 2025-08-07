@@ -81,10 +81,9 @@ class ActionEnum(str, Enum):
     TIMEOUT = "timeout"
 
 # 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
-
+korea = pytz.timezone("Asia/Seoul")
 
 def is_timeout():
-    korea = pytz.timezone("Asia/Seoul")
     now = datetime.now(korea)
     minute = (now.minute // 15) * 15
     start_time = now.replace(minute=minute, second=0, microsecond=0)
@@ -96,7 +95,7 @@ def is_timeout():
 # 가장 가까운 15분 단위로 반올림
 def round_to_nearest_15min(dt: datetime = None):
     if dt is None:
-        dt = datetime.now()
+        dt = datetime.now(korea)
     discard = timedelta(minutes=dt.minute % 15,
                         seconds=dt.second,
                         microseconds=dt.microsecond)
@@ -206,7 +205,7 @@ def get_node_result():
             return jsonify({
                 "status": "success",
                 "data": data,
-                "timestamp": datetime.now().isoformat(timespec='seconds'),
+                "timestamp": datetime.now(korea).isoformat(timespec='seconds'),
                 "fail_reason": None
             })
 

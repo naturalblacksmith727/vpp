@@ -27,7 +27,7 @@ def round_to_nearest_15min(dt):
 
 # 입찰 결과 결정 및 bidding_result와 relay_status에 반영 
 def evaluate_bids():
-    now = datetime.now()
+    now = datetime.now(KST)
     print(f"[{now}] ⏳ 입찰 평가 시작")
 
     try:
@@ -141,7 +141,7 @@ def evaluate_bids():
 
 # 수익 계산
 def calculate_profit():
-    now = datetime.now()
+    now = datetime.now(KST)
     rounded_time = round_to_nearest_15min(now)
     print(f"[{rounded_time}] 💰 수익 계산 시작")
 
