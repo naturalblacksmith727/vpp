@@ -229,7 +229,7 @@ def start_scheduler():
     scheduler = BackgroundScheduler(timezone=KST)
 
     # 1. 입찰 평가: 매 15분 0초
-    scheduler.add_job(evaluate_bids, 'cron', minute='0,15,30,45', second=0, id='evaluate_bids')
+    scheduler.add_job(evaluate_bids, 'cron', minute='0,15,30,45', second=10, id='evaluate_bids')
     
     # 2. 수익 계산: 매 15분 30초 (relay_status 반영 후)
     scheduler.add_job(calculate_profit, 'cron', minute='0,15,30,45', second=50, id='calculate_profit')
