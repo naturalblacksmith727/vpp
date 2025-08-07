@@ -47,45 +47,6 @@ RELAY_MAPPING = {
     3: '배터리'
 }
 
-# arudino-relay 매핑용 
-relay_id_map = {
-    1: 1,  
-    2: 2,  
-    3: 4,  
-    4: 5,  
-    5: 3   
-}
-
-# arduino-relay 매핑용 함수 
-def transform_data(data):
-    input_id = data["relay_id"]
-
-    # 입력 ID → 실제 회로 ID
-    relay_id_map = {
-        1: 1,  # 태양
-        2: 2,  # 풍력
-        3: 4,  # 태양-배터리 연결
-        4: 5,  # 풍력-배터리 연결
-        5: 3   # 배터리
-    }
-
-    mapped_id = relay_id_map.get(input_id)
-    if mapped_id is None:
-        raise ValueError(f"Unknown relay_id: {input_id}")
-
-    # 배터리인 경우만 soc 유지, 나머지는 None
-    if input_id == 5:  # 배터리
-        soc = data["soc"]
-    else:
-        soc = None
-
-    return {
-        "relay_id": mapped_id,
-        "power_kw": data["power_kw"],
-        "soc": soc
-    }
-
-
 # 자원 유형별 기상필드 매핑
 RESOURCE_EXTRA_FIELDS = {
     '태양광': ['solar_irradiance'],
@@ -93,6 +54,19 @@ RESOURCE_EXTRA_FIELDS = {
     '배터리': ['soc']
 }
 
+# relay_id 발전소 타입
+RELAY_TYPE = {
+    1: "solar",
+    2: "wind",
+    3: "battery",
+    4: "solar",
+    5: "wind"
+}
+ENTITY_TYPE = {
+    1: "태양광",
+    2: "풍력",
+    3: "배터리"
+}
 
 #  PUT/fr_serv/bid_edit_fix 에서 사용할 enum 클래스
 
@@ -887,9 +861,7 @@ def receive_node_status():
                 "reason": "Invalid type: soc must be float or null"
             })
 
-        transformed = transform_data(data)
-
-        node_status_storage.append(transformed)
+        node_status_storage.append(data)
 
         # DB 저장 (node_timestamp는 DB에서 자동 생성됨)
         conn = get_connection()
@@ -899,9 +871,9 @@ def receive_node_status():
             VALUES (%s, %s, %s)
             """
             cursor.execute(sql, (
-                transformed["relay_id"],
-                transformed["power_kw"],
-                transformed["soc"]
+                data["relay_id"],
+                data["power_kw"],
+                data["soc"]
             ))
 
             # 새로 삽입된 레코드의 timestamp 조회
