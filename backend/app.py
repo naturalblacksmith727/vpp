@@ -3,20 +3,23 @@ from flask_cors import CORS
 from vpp_api import vpp_blueprint
 from tasks import start_scheduler
 
-# 🔹 KST 타임존 로깅을 위한 import
 import logging
 from pytz import timezone
 from datetime import datetime
 
-# 🔹 KST 타임존으로 시간 찍히게 하는 Formatter 정의
+# KST 타임존으로 시간 찍히게 하는 Formatter 정의
 class KSTFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
         kst = timezone("Asia/Seoul")
         dt = datetime.fromtimestamp(record.created, tz=kst)
         return dt.strftime('%Y-%m-%d %H:%M:%S')
 
-# 🔹 werkzeug 로거에 적용
+# werkzeug 로거에 적용 (핸들러가 없으면 기본 핸들러 추가)
 log = logging.getLogger('werkzeug')
+if not log.handlers:
+    handler = logging.StreamHandler()
+    log.addHandler(handler)
+
 for handler in log.handlers:
     handler.setFormatter(KSTFormatter('%(asctime)s - %(message)s'))
 
