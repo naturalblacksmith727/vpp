@@ -65,6 +65,8 @@ def evaluate_bids():
             # SMP 가격
             cursor.execute("SELECT price_krw FROM smp WHERE smp_time = %s", (rounded_time,))
             smp_row = cursor.fetchone()
+            print(rounded_time)
+            print(smp_row)
             if not smp_row:
                 print("❌ SMP 데이터 없음")
                 conn.rollback()
