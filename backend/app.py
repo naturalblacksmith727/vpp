@@ -8,7 +8,7 @@ import logging
 from pytz import timezone
 from datetime import datetime
 
-KST = pytz.timezone("Asia/Seoul")
+KST = timezone("Asia/Seoul")
 
 # KST 타임존으로 시간 찍히게 하는 Formatter 정의
 class KSTFormatter(logging.Formatter):
