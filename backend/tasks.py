@@ -15,6 +15,9 @@ def get_connection():
 
 KST = pytz.timezone("Asia/Seoul")
 
+TEST_START = datetime(2025, 8, 7, 13, 30, tzinfo=KST)
+TEST_END = datetime(2025, 8, 7, 13, 45, tzinfo=KST)
+
 # datetime.now()가 15분으로 정확히 찍히지 않을 경우 예방하기 위한 15분단위로 반올림 해주는 함수 
 def round_to_nearest_15min(dt):
     discard = timedelta(minutes=dt.minute % 15,
@@ -412,7 +415,10 @@ def calculate_profit_fixed_period(start_time, end_time):
     except Exception as e:
         print(f"❌ calculate_profit_fixed_period 오류: {e}")
 
-
+def calculate_profit_test_fixed_period():
+    print(f"[{datetime.now(KST)}] 🧪 테스트용 고정 기간 수익 계산 실행")
+    # 현재 시간 무시, 고정 기간(start, end)로 수익 계산 수행
+    calculate_profit_fixed_period(TEST_START, TEST_END)
 
 # 스케줄러
 def start_scheduler():
@@ -422,7 +428,8 @@ def start_scheduler():
     scheduler.add_job(evaluate_bids, 'cron', minute='0,15,30,45', second=10, id='evaluate_bids')
     
     # 2. 수익 계산: 매 15분 30초 (relay_status 반영 후)
-    scheduler.add_job(calculate_profit, 'cron', second='*/30', id='calculate_profit')
+    # scheduler.add_job(calculate_profit, 'cron', second='*/30', id='calculate_profit')
+    scheduler.add_job(calculate_profit_test_fixed_period, 'interval', seconds=30, id='calculate_profit_test')
 
     scheduler.start()
     print("📅 APScheduler 시작됨 (15분 간격)")
