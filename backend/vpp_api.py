@@ -952,3 +952,24 @@ def get_all_commands():
             "commands": None,
             "fail_reason": f"internal server error: {str(e)}"
         })
+
+
+
+
+
+
+@vpp_blueprint.route("/test_profit", methods=["GET"])
+def test_profit():
+    start_time = datetime.datetime(2025, 8, 7, 13, 30)
+    end_time = datetime.datetime(2025, 8, 7, 13, 45)
+
+    current_time = start_time
+    while current_time < end_time:
+        rows = get_recent_node_status_data(current_time)
+        if rows:
+            profit = calculate_from_rows(rows)
+            save_profit_to_db(current_time, profit)
+        time.sleep(20)  # 20초마다 반복
+        current_time += datetime.timedelta(seconds=20)
+
+    return jsonify({"status": "success", "msg": "13:30~13:45 수익 계산 완료"})
