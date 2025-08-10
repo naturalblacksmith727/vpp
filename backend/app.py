@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 from vpp_api import vpp_blueprint
-from tasks import calculate_profit_fixed_period, start_scheduler
+from tasks import start_scheduler
 
 
 import logging
@@ -30,7 +30,7 @@ for handler in log.handlers:
 app = Flask(__name__)
 CORS(app)
 
-# app.register_blueprint(vpp_blueprint)
+app.register_blueprint(vpp_blueprint)
 
 
 if __name__ == "__main__":
