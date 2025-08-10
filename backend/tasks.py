@@ -142,20 +142,103 @@ def evaluate_bids():
 
 
 # 수익 계산
+# def calculate_profit():
+#     now = datetime.now(KST)
+#     rounded_time = round_to_nearest_15min(now)
+#     print(f"[{rounded_time}] 💰 수익 계산 시작")
+
+#     # 15분 구간 범위 계산
+#     period_start = rounded_time
+#     period_end = rounded_time + timedelta(minutes=15)
+
+#     try:
+#         conn = get_connection()
+#         with conn.cursor() as cursor:
+
+#             # 1. 현재 accepted 입찰 대상 조회
+#             cursor.execute("""
+#                 SELECT br.entity_id, br.bid_price
+#                 FROM bidding_result br
+#                 JOIN (
+#                     SELECT entity_id, MAX(id) AS max_id
+#                     FROM bidding_result
+#                     WHERE result = 'accepted'
+#                     GROUP BY entity_id
+#                 ) latest ON br.id = latest.max_id
+#             """)
+#             accepted_bids = cursor.fetchall()
+
+#             if not accepted_bids:
+#                 print("⚠️ 수익 계산할 accepted 입찰 없음")
+#                 return
+
+#             for bid in accepted_bids:
+#                 entity_id = bid["entity_id"]
+#                 unit_price = bid["bid_price"]
+
+#                 # 2. 해당 entity의 relay 상태 확인
+#                 cursor.execute("""
+#                     SELECT status FROM relay_status
+#                     WHERE relay_id = %s
+#                 """, (entity_id,))
+#                 relay_row = cursor.fetchone()
+
+#                 if not relay_row or relay_row["status"] != 1:
+#                     print(f"⛔ entity_id={entity_id} → relay OFF → 수익 계산 생략")
+#                     continue
+
+#                 # 3. 해당 15분 구간 동안의 발전 로그 조회
+#                 cursor.execute("""
+#                     SELECT power_kw
+#                     FROM node_status_log
+#                     WHERE relay_id = %s
+#                     AND node_timestamp BETWEEN %s AND %s
+#                 """, (entity_id, period_start, period_end))
+#                 power_logs = cursor.fetchall()
+
+#                 if not power_logs:
+#                     print(f"⚠️ 발전 로그 없음: entity_id={entity_id}")
+#                     continue
+
+#                 # 4. 각 로그 기반 수익 합산
+#                 total_revenue = 0
+#                 for row in power_logs:
+#                     power_kw = row["power_kw"]
+#                     revenue = power_kw * unit_price * (20 / 3600)  # 20초 간격 기준
+#                     total_revenue += revenue
+
+#                 total_revenue = round(total_revenue, 2)
+#                 print(f"✅ entity_id={entity_id} → 로그 {len(power_logs)}개, total_revenue={total_revenue}원")
+
+#                 # 5. profit_log에 기록
+#                 cursor.execute("""
+#                     INSERT INTO profit_log (timestamp, entity_id, unit_price, revenue_krw)
+#                     VALUES (%s, %s, %s, %s)
+#                 """, (rounded_time, entity_id, unit_price, total_revenue))
+
+#         conn.commit()
+#         conn.close()
+#         print(f"[{rounded_time}] 💾 수익 저장 완료")
+
+#     except Exception as e:
+#         print(f"❌ calculate_profit 오류: {e}")
+
+
+# --- 수익 계산 함수 ---
 def calculate_profit():
     now = datetime.now(KST)
     rounded_time = round_to_nearest_15min(now)
-    print(f"[{rounded_time}] 💰 수익 계산 시작")
 
-    # 15분 구간 범위 계산
     period_start = rounded_time
     period_end = rounded_time + timedelta(minutes=15)
+
+    print(f"[{rounded_time}] 💰 수익 계산 중 ({period_start} ~ {period_end})")
 
     try:
         conn = get_connection()
         with conn.cursor() as cursor:
 
-            # 1. 현재 accepted 입찰 대상 조회
+            # 1. accepted 입찰 조회
             cursor.execute("""
                 SELECT br.entity_id, br.bid_price
                 FROM bidding_result br
@@ -176,7 +259,7 @@ def calculate_profit():
                 entity_id = bid["entity_id"]
                 unit_price = bid["bid_price"]
 
-                # 2. 해당 entity의 relay 상태 확인
+                # 2. relay 상태 확인
                 cursor.execute("""
                     SELECT status FROM relay_status
                     WHERE relay_id = %s
@@ -187,30 +270,42 @@ def calculate_profit():
                     print(f"⛔ entity_id={entity_id} → relay OFF → 수익 계산 생략")
                     continue
 
-                # 3. 해당 15분 구간 동안의 발전 로그 조회
+                # 3. node_status_log 조회 및 timestamp ASC 정렬
                 cursor.execute("""
-                    SELECT power_kw
+                    SELECT node_timestamp, power_kw
                     FROM node_status_log
                     WHERE relay_id = %s
                     AND node_timestamp BETWEEN %s AND %s
+                    ORDER BY node_timestamp ASC
                 """, (entity_id, period_start, period_end))
-                power_logs = cursor.fetchall()
+                logs = cursor.fetchall()
 
-                if not power_logs:
+                if not logs:
                     print(f"⚠️ 발전 로그 없음: entity_id={entity_id}")
                     continue
 
-                # 4. 각 로그 기반 수익 합산
+                # 4. 불규칙 시간 간격 고려한 수익 계산
                 total_revenue = 0
-                for row in power_logs:
-                    power_kw = row["power_kw"]
-                    revenue = power_kw * unit_price * (20 / 3600)  # 20초 간격 기준
+                for i in range(len(logs)):
+                    current_log = logs[i]
+                    current_time = current_log['node_timestamp']
+                    power_kw = current_log['power_kw']
+
+                    if i < len(logs) - 1:
+                        next_time = logs[i+1]['node_timestamp']
+                    else:
+                        next_time = period_end  # 마지막 로그 다음은 period_end
+
+                    time_diff_seconds = (next_time - current_time).total_seconds()
+
+                    # 발전량(power_kw) * 입찰가 * 시간(시간 단위)
+                    revenue = power_kw * unit_price * (time_diff_seconds / 3600)
                     total_revenue += revenue
 
                 total_revenue = round(total_revenue, 2)
-                print(f"✅ entity_id={entity_id} → 로그 {len(power_logs)}개, total_revenue={total_revenue}원")
+                print(f"✅ entity_id={entity_id} → 로그 {len(logs)}개, total_revenue={total_revenue}원")
 
-                # 5. profit_log에 기록
+                # 5. profit_log 저장
                 cursor.execute("""
                     INSERT INTO profit_log (timestamp, entity_id, unit_price, revenue_krw)
                     VALUES (%s, %s, %s, %s)
@@ -223,6 +318,87 @@ def calculate_profit():
     except Exception as e:
         print(f"❌ calculate_profit 오류: {e}")
 
+def calculate_profit_fixed_period(start_time, end_time):
+    rounded_time = start_time  # 기준 시간은 시작 시간
+
+    print(f"[{rounded_time}] 💰 수익 계산 시작 ({start_time} ~ {end_time})")
+
+    try:
+        conn = get_connection()
+        with conn.cursor() as cursor:
+
+            cursor.execute("""
+                SELECT br.entity_id, br.bid_price
+                FROM bidding_result br
+                JOIN (
+                    SELECT entity_id, MAX(id) AS max_id
+                    FROM bidding_result
+                    WHERE result = 'accepted'
+                    GROUP BY entity_id
+                ) latest ON br.id = latest.max_id
+            """)
+            accepted_bids = cursor.fetchall()
+
+            if not accepted_bids:
+                print("⚠️ 수익 계산할 accepted 입찰 없음")
+                return
+
+            for bid in accepted_bids:
+                entity_id = bid["entity_id"]
+                unit_price = bid["bid_price"]
+
+                cursor.execute("""
+                    SELECT status FROM relay_status
+                    WHERE relay_id = %s
+                """, (entity_id,))
+                relay_row = cursor.fetchone()
+
+                if not relay_row or relay_row["status"] != 1:
+                    print(f"⛔ entity_id={entity_id} → relay OFF → 수익 계산 생략")
+                    continue
+
+                cursor.execute("""
+                    SELECT node_timestamp, power_kw
+                    FROM node_status_log
+                    WHERE relay_id = %s
+                    AND node_timestamp BETWEEN %s AND %s
+                    ORDER BY node_timestamp ASC
+                """, (entity_id, start_time, end_time))
+                logs = cursor.fetchall()
+
+                if not logs:
+                    print(f"⚠️ 발전 로그 없음: entity_id={entity_id}")
+                    continue
+
+                total_revenue = 0
+                for i in range(len(logs)):
+                    current_log = logs[i]
+                    current_time = current_log['node_timestamp']
+                    power_kw = current_log['power_kw']
+
+                    if i < len(logs) - 1:
+                        next_time = logs[i+1]['node_timestamp']
+                    else:
+                        next_time = end_time
+
+                    time_diff_seconds = (next_time - current_time).total_seconds()
+                    revenue = power_kw * unit_price * (time_diff_seconds / 3600)
+                    total_revenue += revenue
+
+                total_revenue = round(total_revenue, 2)
+                print(f"✅ entity_id={entity_id} → 로그 {len(logs)}개, total_revenue={total_revenue}원")
+
+                cursor.execute("""
+                    INSERT INTO profit_log (timestamp, entity_id, unit_price, revenue_krw)
+                    VALUES (%s, %s, %s, %s)
+                """, (rounded_time, entity_id, unit_price, total_revenue))
+
+        conn.commit()
+        conn.close()
+        print(f"[{rounded_time}] 💾 수익 저장 완료")
+
+    except Exception as e:
+        print(f"❌ calculate_profit_fixed_period 오류: {e}")
 
 
 # 스케줄러
@@ -233,7 +409,7 @@ def start_scheduler():
     scheduler.add_job(evaluate_bids, 'cron', minute='0,15,30,45', second=10, id='evaluate_bids')
     
     # 2. 수익 계산: 매 15분 30초 (relay_status 반영 후)
-    scheduler.add_job(calculate_profit, 'cron', minute='0,15,30,45', second=50, id='calculate_profit')
+    scheduler.add_job(calculate_profit, 'cron', second='*/30', id='calculate_profit')
 
     scheduler.start()
     print("📅 APScheduler 시작됨 (15분 간격)")
