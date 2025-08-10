@@ -223,6 +223,89 @@ def calculate_profit():
     except Exception as e:
         print(f"❌ calculate_profit 오류: {e}")
 
+def calculate_profit_test(start_time=None, end_time=None):
+    if start_time and end_time:
+        rounded_time = start_time
+        period_start = start_time
+        period_end = end_time
+    else:
+        now = datetime.now(KST)
+        rounded_time = round_to_nearest_15min(now)
+        period_start = rounded_time
+        period_end = rounded_time + timedelta(minutes=15)
+
+    print(f"[{rounded_time}] 💰 수익 계산 시작 ({period_start} ~ {period_end})")
+
+    try:
+        conn = get_connection()
+        with conn.cursor() as cursor:
+            # 1. 현재 accepted 입찰 대상 조회
+            cursor.execute("""
+                SELECT br.entity_id, br.bid_price
+                FROM bidding_result br
+                JOIN (
+                    SELECT entity_id, MAX(id) AS max_id
+                    FROM bidding_result
+                    WHERE result = 'accepted'
+                    GROUP BY entity_id
+                ) latest ON br.id = latest.max_id
+            """)
+            accepted_bids = cursor.fetchall()
+
+            if not accepted_bids:
+                print("⚠️ 수익 계산할 accepted 입찰 없음")
+                return
+
+            for bid in accepted_bids:
+                entity_id = bid["entity_id"]
+                unit_price = bid["bid_price"]
+
+                # 2. relay 상태 확인
+                cursor.execute("""
+                    SELECT status FROM relay_status
+                    WHERE relay_id = %s
+                """, (entity_id,))
+                relay_row = cursor.fetchone()
+
+                if not relay_row or relay_row["status"] != 1:
+                    print(f"⛔ entity_id={entity_id} → relay OFF → 수익 계산 생략")
+                    continue
+
+                # 3. 발전 로그 조회
+                cursor.execute("""
+                    SELECT power_kw
+                    FROM node_status_log
+                    WHERE relay_id = %s
+                    AND node_timestamp BETWEEN %s AND %s
+                """, (entity_id, period_start, period_end))
+                power_logs = cursor.fetchall()
+
+                if not power_logs:
+                    print(f"⚠️ 발전 로그 없음: entity_id={entity_id}")
+                    continue
+
+                # 4. 수익 합산
+                total_revenue = 0
+                for row in power_logs:
+                    power_kw = row["power_kw"]
+                    revenue = power_kw * unit_price * (20 / 3600)
+                    total_revenue += revenue
+
+                total_revenue = round(total_revenue, 2)
+                print(f"✅ entity_id={entity_id} → 로그 {len(power_logs)}개, total_revenue={total_revenue}원")
+
+                # 5. 기록
+                cursor.execute("""
+                    INSERT INTO profit_log (timestamp, entity_id, unit_price, revenue_krw)
+                    VALUES (%s, %s, %s, %s)
+                """, (rounded_time, entity_id, unit_price, total_revenue))
+
+        conn.commit()
+        conn.close()
+        print(f"[{rounded_time}] 💾 수익 저장 완료")
+
+    except Exception as e:
+        print(f"❌ calculate_profit 오류: {e}")
 
 
 
