@@ -257,13 +257,3 @@ def start_scheduler():
 
     scheduler.start()
     print("📅 APScheduler 시작됨 (15분 간격)")
-
-# 메인 진입점
-if __name__ == "__main__":
-    start_scheduler()
-    # 앱이 종료되지 않도록 유지
-    try:
-        while True:
-            pass
-    except (KeyboardInterrupt, SystemExit):
-        print("🛑 종료됨")
