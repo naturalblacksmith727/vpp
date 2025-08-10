@@ -319,7 +319,7 @@ def calculate_profit():
         print(f"❌ calculate_profit 오류: {e}")
 
 def calculate_profit_fixed_period(start_time, end_time):
-    rounded_time = start_time  # 기준 시간은 시작 시간
+    rounded_time = start_time
 
     print(f"[{rounded_time}] 💰 수익 계산 시작 ({start_time} ~ {end_time})")
 
@@ -371,13 +371,25 @@ def calculate_profit_fixed_period(start_time, end_time):
                     continue
 
                 total_revenue = 0
+
                 for i in range(len(logs)):
                     current_log = logs[i]
+
+                    # node_timestamp가 naive datetime이면 aware로 변환
                     current_time = current_log['node_timestamp']
+                    if current_time.tzinfo is None:
+                        current_time = current_time.replace(tzinfo=None)
+                        # -> 아래 방식으로 KST 적용
+                        from pytz import timezone
+                        KST = timezone("Asia/Seoul")
+                        current_time = KST.localize(current_time)
+
                     power_kw = current_log['power_kw']
 
                     if i < len(logs) - 1:
                         next_time = logs[i+1]['node_timestamp']
+                        if next_time.tzinfo is None:
+                            next_time = KST.localize(next_time)
                     else:
                         next_time = end_time
 
@@ -399,6 +411,7 @@ def calculate_profit_fixed_period(start_time, end_time):
 
     except Exception as e:
         print(f"❌ calculate_profit_fixed_period 오류: {e}")
+
 
 
 # 스케줄러
