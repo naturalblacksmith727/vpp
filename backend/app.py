@@ -34,12 +34,5 @@ CORS(app)
 
 
 if __name__ == "__main__":
-
-    start_time = datetime(2025, 8, 7, 13, 30, tzinfo=KST)
-    end_time = datetime(2025, 8, 7, 13, 45, tzinfo=KST)
-
-
-    print("🧪 8월 7일 13:30~13:45 수익 계산 테스트 시작")
-    calculate_profit_fixed_period(start_time, end_time)
-    # start_scheduler()
+    start_scheduler()
     app.run(debug=True, host="0.0.0.0", port=5001)
