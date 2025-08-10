@@ -1,11 +1,14 @@
 from flask import Flask
 from flask_cors import CORS
 from vpp_api import vpp_blueprint
-from tasks import start_scheduler
+from tasks import calculate_profit_fixed_period, start_scheduler
+
 
 import logging
 from pytz import timezone
 from datetime import datetime
+
+KST = pytz.timezone("Asia/Seoul")
 
 # KST 타임존으로 시간 찍히게 하는 Formatter 정의
 class KSTFormatter(logging.Formatter):
@@ -31,12 +34,10 @@ CORS(app)
 
 
 if __name__ == "__main__":
-    
-    KST = pytz.timezone("Asia/Seoul")
+
     start_time = datetime(2025, 8, 7, 13, 30, tzinfo=KST)
     end_time = datetime(2025, 8, 7, 13, 45, tzinfo=KST)
 
-    from tasks import calculate_profit_fixed_period, start_scheduler
 
     print("🧪 8월 7일 13:30~13:45 수익 계산 테스트 시작")
     calculate_profit_fixed_period(start_time, end_time)
