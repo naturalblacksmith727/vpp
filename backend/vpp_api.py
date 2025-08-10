@@ -952,18 +952,3 @@ def get_all_commands():
             "commands": None,
             "fail_reason": f"internal server error: {str(e)}"
         })
-
-
-
-
-
-
-@vpp_blueprint.route("/test_profit")
-def test_profit():
-    # 예시: 2025-08-07 13:30~13:45 구간
-    start_time = datetime(2025, 8, 7, 13, 30, tzinfo=KST)
-    end_time = datetime(2025, 8, 7, 13, 45, tzinfo=KST)
-
-    calculate_profit_test(start_time, end_time)
-    return {"status": "ok", "msg": "테스트 수익 계산 완료"}
-
