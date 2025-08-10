@@ -964,6 +964,6 @@ def test_profit():
     start_time = datetime(2025, 8, 7, 13, 30, tzinfo=KST)
     end_time = datetime(2025, 8, 7, 13, 45, tzinfo=KST)
 
-    calculate_profit(start_time, end_time)
+    calculate_profit_test(start_time, end_time)
     return {"status": "ok", "msg": "테스트 수익 계산 완료"}
 
