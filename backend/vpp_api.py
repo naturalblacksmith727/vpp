@@ -958,7 +958,7 @@ def get_all_commands():
 
 
 
-@app.route("/test_profit")
+@vpp_blueprint.route("/test_profit")
 def test_profit():
     # 예시: 2025-08-07 13:30~13:45 구간
     start_time = datetime(2025, 8, 7, 13, 30, tzinfo=KST)
