@@ -958,18 +958,12 @@ def get_all_commands():
 
 
 
-@vpp_blueprint.route("/test_profit", methods=["GET"])
+@app.route("/test_profit")
 def test_profit():
-    start_time = datetime.datetime(2025, 8, 7, 13, 30)
-    end_time = datetime.datetime(2025, 8, 7, 13, 45)
+    # 예시: 2025-08-07 13:30~13:45 구간
+    start_time = datetime(2025, 8, 7, 13, 30, tzinfo=KST)
+    end_time = datetime(2025, 8, 7, 13, 45, tzinfo=KST)
 
-    current_time = start_time
-    while current_time < end_time:
-        rows = get_recent_node_status_data(current_time)
-        if rows:
-            profit = calculate_from_rows(rows)
-            save_profit_to_db(current_time, profit)
-        time.sleep(20)  # 20초마다 반복
-        current_time += datetime.timedelta(seconds=20)
+    calculate_profit(start_time, end_time)
+    return {"status": "ok", "msg": "테스트 수익 계산 완료"}
 
-    return jsonify({"status": "success", "msg": "13:30~13:45 수익 계산 완료"})
