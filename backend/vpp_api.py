@@ -127,76 +127,76 @@ def get_node_result():
         conn = get_connection()
 
         with conn.cursor() as cursor:
-        data = {}
-    
-        # 태양광 시간별 전력량
-        sql = """
-        SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
-        FROM node_status_log
-        WHERE relay_id IN (1, 4)
-            AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
-        GROUP BY node_timestamp
-        ORDER BY node_timestamp;
-        """
-        cursor.execute(sql)
-        rows = cursor.fetchall()
-        if rows:
-            data["solar"] = [{"timestamp": row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
-    
-        # 풍력 시간별 전력량
-        sql = """
-        SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
-        FROM node_status_log
-        WHERE relay_id IN (2, 5)
-            AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
-        GROUP BY node_timestamp
-        ORDER BY node_timestamp;
-        """
-        cursor.execute(sql)
-        rows = cursor.fetchall()
-        if rows:
-            data["wind"] = [{"timestamp": row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
-    
-        # 배터리 시간별 전력량 (relay_id 4,5는 더하고 3은 뺌)
-        sql = """
-        SELECT charging.timestamp AS timestamp, ROUND(charging.power_kw - COALESCE(usaged.power_kw,0),2) AS power_kw
-        FROM
-            (
-                SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
-                FROM node_status_log
-                WHERE relay_id IN (4,5)
-                    AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR
-                GROUP BY node_timestamp
-            ) AS charging
-        LEFT JOIN
-            (
-                SELECT node_timestamp AS timestamp, power_kw
-                FROM node_status_log
-                WHERE relay_id IN (3)
-                    AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR
-            ) AS usaged
-        ON charging.timestamp = usaged.timestamp
-        ORDER BY charging.timestamp;
-        """
-        cursor.execute(sql)
-        rows = cursor.fetchall()
-        if rows:
-            data["battery"] = [{"timestamp": row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
-    
-        if not data:
+            data = {}
+        
+            # 태양광 시간별 전력량
+            sql = """
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
+            FROM node_status_log
+            WHERE relay_id IN (1, 4)
+                AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
+            GROUP BY node_timestamp
+            ORDER BY node_timestamp;
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            if rows:
+                data["solar"] = [{"timestamp": row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
+        
+            # 풍력 시간별 전력량
+            sql = """
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
+            FROM node_status_log
+            WHERE relay_id IN (2, 5)
+                AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
+            GROUP BY node_timestamp
+            ORDER BY node_timestamp;
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            if rows:
+                data["wind"] = [{"timestamp": row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
+        
+            # 배터리 시간별 전력량 (relay_id 4,5는 더하고 3은 뺌)
+            sql = """
+            SELECT charging.timestamp AS timestamp, ROUND(charging.power_kw - COALESCE(usaged.power_kw,0),2) AS power_kw
+            FROM
+                (
+                    SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
+                    FROM node_status_log
+                    WHERE relay_id IN (4,5)
+                        AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR
+                    GROUP BY node_timestamp
+                ) AS charging
+            LEFT JOIN
+                (
+                    SELECT node_timestamp AS timestamp, power_kw
+                    FROM node_status_log
+                    WHERE relay_id IN (3)
+                        AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR
+                ) AS usaged
+            ON charging.timestamp = usaged.timestamp
+            ORDER BY charging.timestamp;
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            if rows:
+                data["battery"] = [{"timestamp": row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
+        
+            if not data:
+                return jsonify({
+                    "status": "failed",
+                    "data": None,
+                    "timestamp": None,
+                    "fail_reason": "no_data_available"
+                })
+        
             return jsonify({
-                "status": "failed",
-                "data": None,
-                "timestamp": None,
-                "fail_reason": "no_data_available"
+                "status": "success",
+                "data": data,
+                "timestamp": datetime.now(korea).isoformat(timespec='seconds'),
+                "fail_reason": None
             })
-    
-        return jsonify({
-            "status": "success",
-            "data": data,
-            "timestamp": datetime.now(korea).isoformat(timespec='seconds'),
-            "fail_reason": None
-        })
     
 
 
