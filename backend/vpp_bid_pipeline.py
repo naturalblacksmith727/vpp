@@ -373,16 +373,15 @@ def run_bid_pipeline():
             weather = {}
 
             for k in weather_keys:
-                matching_keys = [key for key in solar_resource.keys() if key.strip() == k]
-                if matching_keys:
-                    value = solar_resource[matching_keys[0]]
-                    if value == "null":
-                        value = None
-                    weather[k] = value
+                for resource in resources:
+                    if k in resource and resource[k] not in (None, "null"):
+                        weather[k] = resource[k]
+                        break
                 else:
-                    print(f"⚠️ 날씨 키 누락됨: {k}")
+                    weather[k] = None  # 못 찾으면 None 처리
 
             print("✅ 통합 추출된 weather dict:", weather)
+
 
             # AI 프롬프트에 맞게 노드 상태 중 태양광, 풍력, 배터리만 필터링
             filtered_nodes = []
