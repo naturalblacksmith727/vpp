@@ -33,8 +33,8 @@ function ChatBot() {
   useEffect(() => {
     const fetchData = () => {
       axios
-        //.get("https://aivpp.duckdns.org/api/serv_fr/generate_bid")
-        .get("/api/serv_fr/generate_bid")
+        .get("https://aivpp.duckdns.org/api/serv_fr/generate_bid")
+        //.get("/api/serv_fr/generate_bid")
         .then((response) => {
           if (response.data.fail_reason === null) {
             setBidData(response.data);
@@ -48,8 +48,8 @@ function ChatBot() {
         });
 
       axios
-        //.get("https://aivpp.duckdns.org/api/serv_fr/bidding_result")
-        .get("/api/serv_fr/bidding_result")
+        .get("https://aivpp.duckdns.org/api/serv_fr/bidding_result")
+        //.get("/api/serv_fr/bidding_result")
         .then((response) => {
           if (response.data.status === "success") {
             setResultData(response.data);
@@ -75,8 +75,8 @@ function ChatBot() {
   const sendBidEditFix = async (action, bids = null) => {
     try {
       const response = await axios.put(
-        //"https://aivpp.duckdns.org/api/fr_serv/bid_edit_fix",
-        "/api/fr_serv/bid_edit_fix",
+        "https://aivpp.duckdns.org/api/fr_serv/bid_edit_fix",
+        //"/api/fr_serv/bid_edit_fix",
         {
           action,
           bids,
