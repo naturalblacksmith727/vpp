@@ -197,6 +197,15 @@ def get_node_result():
                 "timestamp": datetime.now(korea).isoformat(timespec='seconds'),
                 "fail_reason": None
             })
+            
+    except Exception as e:
+        print("서버 에러 발생:", e)
+        return jsonify({
+            "status": "failed",
+            "data": None,
+            "timestamp": None,
+            "fail_reason": "server_error"
+        })
     
 
 
