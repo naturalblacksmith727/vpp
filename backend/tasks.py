@@ -153,13 +153,16 @@ def get_last_calc_time():
             cursor.execute("SELECT MAX(timestamp) as last_time FROM profit_log")
             row = cursor.fetchone()
             if row and row["last_time"]:
-                return row["last_time"]
+                last_time = row["last_time"]
+                # timezone 정보 없으면 KST로 맞추기
+                if last_time.tzinfo is None:
+                    last_time = last_time.replace(tzinfo=KST)
+                return last_time
             else:
-                # 처음이면 예를 들어 과거 1시간 전이나 초기값 지정 가능
-                from datetime import datetime, timedelta
                 return datetime.now(KST) - timedelta(hours=1)
     finally:
         conn.close()
+
 
 # 수익 계산 
 def calculate_profit_incremental():
