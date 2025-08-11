@@ -60,6 +60,7 @@ def evaluate_bids():
                 return
 
             rounded_time = round_to_nearest_15min(now)
+            print(now)
 
             # 입찰 정보
             cursor.execute("SELECT * FROM bidding_log WHERE bid_id = %s", (latest_bid_id,))
