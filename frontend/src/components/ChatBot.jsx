@@ -1,6 +1,7 @@
 import axios from "axios";
 import LoadingDots from "./LoadingDots";
 import React, { useEffect, useState, useRef } from "react";
+import LatestBidResultMessage from "./LatestBidResultMessage";
 
 function ChatBot() {
   const [bidData, setBidData] = useState(null);
@@ -93,7 +94,7 @@ function ChatBot() {
 
     // 사용자 메시지 추가
     const userInput = input.trim();
-    const normalizedInput = userInput.replace(/[;,]+/g, " "); // 공백제거
+    const normalizedInput = userInput.replace(/[\s;,]+/g, ""); // 공백제거
 
     setMessages((prev) => [...prev, { sender: "user", text: userInput }]);
     setInput("");
@@ -165,7 +166,7 @@ function ChatBot() {
                 sender: "bot",
                 text:
                   edit_result.status === "success"
-                    ? `입찰가 수정 완료:\n${successText}`
+                    ? `입찰가 수정 완료:\n${successText}\n\n입찰이 완료되었습니다.`
                     : `수정 실패: ${edit_result.fail_reason}`,
                 timestamp: new Date().toLocaleTimeString("ko-KR", {
                   hour: "2-digit",
@@ -285,7 +286,7 @@ function ChatBot() {
   };
   // 시간마다 자동 메세지 전송
   useEffect(() => {
-    const checkTimeAndSend = () => {
+    const checkTimeAndSend = async () => {
       const now = new Date();
       const minutes = now.getMinutes();
 
@@ -296,6 +297,8 @@ function ChatBot() {
         bidData
       ) {
         lastMinuteRef.current = minutes;
+
+        await LatestBidResultMessage(setMessages);
 
         // 입찰 시작 표시
         setIsBiddingActive(true);

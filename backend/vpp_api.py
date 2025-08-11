@@ -131,7 +131,7 @@ def get_node_result():
         
             # 태양광 시간별 전력량
             sql = """
-            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw, round(avg(soc),4) AS soc
             FROM node_status_log
             WHERE relay_id IN (1, 4)
                 AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
@@ -141,11 +141,12 @@ def get_node_result():
             cursor.execute(sql)
             rows = cursor.fetchall()
             if rows:
-                data["solar"] = [{"timestamp": row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
-        
+                data["solar"] = [{"timestamp": row["timestamp"].strftime(
+                    '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
+
             # 풍력 시간별 전력량
             sql = """
-            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw, round(avg(soc),4) AS soc
             FROM node_status_log
             WHERE relay_id IN (2, 5)
                 AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
@@ -155,9 +156,10 @@ def get_node_result():
             cursor.execute(sql)
             rows = cursor.fetchall()
             if rows:
-                data["wind"] = [{"timestamp": row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
-        
-            # 배터리 시간별 전력량 (relay_id 4,5는 더하고 3은 뺌)
+                data["wind"] = [{"timestamp": row["timestamp"].strftime(
+                    '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
+
+            # 배터리 시간별 순충전전력량 (relay_id 4,5는 더하고 3은 뺌)
             sql = """
             SELECT charging.timestamp AS timestamp, ROUND(charging.power_kw - COALESCE(usaged.power_kw,0),2) AS power_kw
             FROM
@@ -180,22 +182,20 @@ def get_node_result():
             """
             cursor.execute(sql)
             rows = cursor.fetchall()
+
+            soc_sql = """
+            """
+
             if rows:
-                data["battery"] = [{"timestamp": row["timestamp"].strftime('%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
-        
-            if not data:
-                return jsonify({
-                    "status": "failed",
-                    "data": None,
-                    "timestamp": None,
-                    "fail_reason": "no_data_available"
-                })
-        
+                data["battery"] = [{"timestamp": row["timestamp"].strftime(
+                    '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
+
             return jsonify({
-                "status": "success",
+                "status": "success" if any([data["solar"],data["wind"], data["battery"]]) else "failed",
                 "data": data,
-                "timestamp": datetime.now(korea).isoformat(timespec='seconds'),
-                "fail_reason": None
+                "timestamp": datetime.now().isoformat(timespec='seconds'),
+                "fail_reason": None if any([data["solar"],data["wind"], data["battery"]]) else "no_data_avilable"
+
             })
             
     except Exception as e:
@@ -225,7 +225,7 @@ def get_profit_result():
             total_generation_kwh = cursor.fetchone()
 
             sql = """
-            SELECT ROUND(CAST(SUM(revenue_krw) AS DECIMAL(10,2)), 0) AS total_revenue_krw
+            SELECT ROUND((SUM(revenue_krw)), 1) AS total_revenue_krw
             FROM profit_log
             """
             cursor.execute(sql)
