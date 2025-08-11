@@ -19,7 +19,8 @@ function Graphs() {
   useEffect(() => {
     const fetchData = () => {
       axios
-        .get("https://aivpp.duckdns.org/api/serv_fr/node_status")
+        //.get("https://aivpp.duckdns.org/api/serv_fr/node_status")
+        .get("/api/serv_fr/node_status")
         .then((response) => {
           if (response.data.status === "success") {
             setNodeData(response.data.data);
@@ -45,7 +46,7 @@ function Graphs() {
   // 시간대별 태양광
   const solarData = nodeData
     ? nodeData.solar.map((item) => ({
-        시간: item.timestamp.slice(9, 16),
+        시간: item.timestamp.slice(11, 16),
         생산전력량: item.power_kw,
       }))
     : [];

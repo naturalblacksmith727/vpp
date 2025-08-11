@@ -8,7 +8,8 @@ function RevenueDashboard() {
   useEffect(() => {
     const fetchData = () => {
       axios
-        .get("https://aivpp.duckdns.org/api/serv_fr/profit")
+        //.get("https://aivpp.duckdns.org/api/serv_fr/profit")
+        .get("/api/serv_fr/profit")
         .then((response) => {
           if (response.data.status === "success") {
             setprofitData(response.data.data);
