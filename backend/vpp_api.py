@@ -1,10 +1,8 @@
 import traceback  # 파일 상단에 추가
-from flask import Flask, request, jsonify, Blueprint
+from flask import request, jsonify, Blueprint
 from datetime import datetime, timedelta
 import pytz
 import pymysql
-import json
-from flask_cors import CORS
 from enum import Enum
 
 
@@ -81,10 +79,9 @@ class ActionEnum(str, Enum):
     TIMEOUT = "timeout"
 
 # 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
-
+korea = pytz.timezone("Asia/Seoul")
 
 def is_timeout():
-    korea = pytz.timezone("Asia/Seoul")
     now = datetime.now(korea)
     minute = (now.minute // 15) * 15
     start_time = now.replace(minute=minute, second=0, microsecond=0)
@@ -96,7 +93,7 @@ def is_timeout():
 # 가장 가까운 15분 단위로 반올림
 def round_to_nearest_15min(dt: datetime = None):
     if dt is None:
-        dt = datetime.now()
+        dt = datetime.now(korea)
     discard = timedelta(minutes=dt.minute % 15,
                         seconds=dt.second,
                         microseconds=dt.microsecond)
@@ -126,17 +123,12 @@ def is_entity_active(relay_id):
 # 1. GET/node_status: 발전소 node_status: 발전소 결과 요청(서버->프론트엔드)
 @vpp_blueprint.route('/serv_fr/node_status', methods=['GET'])
 def get_node_result():
-    # 설비별로 데이터 분류
-    data = {
-        "solar": [],
-        "wind": [],
-        "battery": []
-    }
-
     try:
         conn = get_connection()
 
         with conn.cursor() as cursor:
+            data = {}
+        
             # 태양광 시간별 전력량
             sql = """
             SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw, round(avg(soc),4) AS soc
@@ -148,7 +140,6 @@ def get_node_result():
             """
             cursor.execute(sql)
             rows = cursor.fetchall()
-
             if rows:
                 data["solar"] = [{"timestamp": row["timestamp"].strftime(
                     '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
@@ -164,7 +155,6 @@ def get_node_result():
             """
             cursor.execute(sql)
             rows = cursor.fetchall()
-
             if rows:
                 data["wind"] = [{"timestamp": row["timestamp"].strftime(
                     '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
@@ -205,17 +195,18 @@ def get_node_result():
                 "data": data,
                 "timestamp": datetime.now().isoformat(timespec='seconds'),
                 "fail_reason": None if any([data["solar"],data["wind"], data["battery"]]) else "no_data_avilable"
-            })
 
-    # 서버 내부 문제
+            })
+            
     except Exception as e:
-        print("에러 발생: ", str(e))
+        print("서버 에러 발생:", e)
         return jsonify({
             "status": "failed",
             "data": None,
             "timestamp": None,
             "fail_reason": "server_error"
         })
+    
 
 
 # 2. GET/profit: 지금까지 얻은 총 수익 보여주기 (프론트 -> 서버)

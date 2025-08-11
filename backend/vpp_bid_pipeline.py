@@ -1,6 +1,6 @@
 import requests
 import json, re
-import time
+import time, pytz
 import sys
 from datetime import datetime, timedelta
 from langchain_openai import ChatOpenAI
@@ -8,6 +8,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.schema import SystemMessage, HumanMessage
 
 
+KST = pytz.timezone("Asia/Seoul")
 
 
 # ✅ LLM 초기화
@@ -61,7 +62,7 @@ def extract_json_from_text(text: str):
     return json_str
 
 def sleep_until_next_quarter():
-    now = datetime.now()
+    now = datetime.now(KST)
     # 분 단위를 15로 나눈 뒤 다음 배수로 반올림
     minute = (now.minute // 15 + 1) * 15
     if minute == 60:
@@ -75,7 +76,7 @@ def sleep_until_next_quarter():
 
 def round_to_nearest_15min(dt: datetime = None):
     if not dt:
-        dt = datetime.now()
+        dt = datetime.now(KST)
     discard = timedelta(minutes=dt.minute % 15,
                         seconds=dt.second,
                         microseconds=dt.microsecond)
@@ -351,38 +352,27 @@ def run_bid_pipeline():
 
             if node_status.get("result") != "success":
                 raise ValueError("Step1 node_status 실패")
-
+            
             # 전체 자원 리스트 가져오기
             resources = node_status.get("resources", [])
-
+            
             if not resources:
                 raise ValueError("자원 데이터가 비어있음")
-
-            # 태양광 자원 찾기
-            solar_resource = next((r for r in resources if r.get("type") == "태양광"), None)
-            if not solar_resource:
-                raise ValueError("태양광 자원이 없어서 날씨 추출 불가")
-
-
-            if not resources:
-                raise ValueError("자원 데이터가 비어있음")
-
+            
             # 날씨 키 필터링 (모든 자원에서 먼저 발견되는 값 사용)
             weather_keys = ["cloud_cover_okta", "humidity_pct", "rainfall_mm", "temperature_c", "solar_irradiance", "wind_speed"]
             weather = {}
-
+            
             for k in weather_keys:
-                matching_keys = [key for key in solar_resource.keys() if key.strip() == k]
-                if matching_keys:
-                    value = solar_resource[matching_keys[0]]
-                    if value == "null":
-                        value = None
-                    weather[k] = value
+                for resource in resources:
+                    if k in resource and resource[k] not in (None, "null"):
+                        weather[k] = resource[k]
+                        break
                 else:
-                    print(f"⚠️ 날씨 키 누락됨: {k}")
-
+                    weather[k] = None  # 못 찾으면 None 처리
+            
             print("✅ 통합 추출된 weather dict:", weather)
-
+            
             # AI 프롬프트에 맞게 노드 상태 중 태양광, 풍력, 배터리만 필터링
             filtered_nodes = []
             for node in resources:
@@ -406,8 +396,9 @@ def run_bid_pipeline():
                             "soc": node.get("soc"),
                         })
                     filtered_nodes.append(filtered_node)
-
+            
             print("✅ AI 전달용 node list:", filtered_nodes)
+
 
             # AI 프롬프트 호출
             res_json, res_summary = summarize_node_and_weather(filtered_nodes, weather, llm)
