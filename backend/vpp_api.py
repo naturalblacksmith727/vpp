@@ -149,9 +149,9 @@ def get_node_result():
             cursor.execute(sql)
             rows = cursor.fetchall()
 
-            if rows:
-                data["solar"] = [{"timestamp": row["timestamp"].strftime(
-                    '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
+            
+            data["solar"] = [{"timestamp": row["timestamp"].strftime(
+                '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
 
             # 풍력 시간별 전력량
             sql = """
@@ -165,9 +165,9 @@ def get_node_result():
             cursor.execute(sql)
             rows = cursor.fetchall()
 
-            if rows:
-                data["wind"] = [{"timestamp": row["timestamp"].strftime(
-                    '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
+            
+            data["wind"] = [{"timestamp": row["timestamp"].strftime(
+                '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
 
             # 배터리 시간별 순충전전력량 (relay_id 4,5는 더하고 3은 뺌)
             sql = """
@@ -196,9 +196,9 @@ def get_node_result():
             soc_sql = """
             """
 
-            if rows:
-                data["battery"] = [{"timestamp": row["timestamp"].strftime(
-                    '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
+            
+            data["battery"] = [{"timestamp": row["timestamp"].strftime(
+                '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
 
             return jsonify({
                 "status": "success" if any([data["solar"],data["wind"], data["battery"]]) else "failed",
