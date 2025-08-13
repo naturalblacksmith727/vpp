@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pymysql, pytz
 
 def get_connection():
-    return pymysql.connect(
+    conn = pymysql.connect(
         host="database-1.cts2qeeg0ot5.ap-northeast-2.rds.amazonaws.com",
         user="kevin",
         db="vpp_2",
@@ -12,6 +12,9 @@ def get_connection():
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor
     )
+    with conn.cursor() as cursor:
+        cursor.execute("SET time_zone = '+09:00'")
+    return conn
 
 KST = pytz.timezone("Asia/Seoul")
 
