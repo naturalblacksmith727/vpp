@@ -29,9 +29,6 @@ def round_to_nearest_15min(dt):
         dt += timedelta(minutes=15)
     return dt
 
-# KST aware datetime → UTC naive datetime 변환 함수 (DB 저장용)
-def kst_to_utc_naive(dt_kst):
-    return dt_kst.astimezone(pytz.UTC).replace(tzinfo=None)
 
 def evaluate_bids():
     now = datetime.now(KST)
@@ -62,17 +59,16 @@ def evaluate_bids():
                 return
 
             rounded_time_kst = round_to_nearest_15min(now)
-            rounded_time_utc = kst_to_utc_naive(rounded_time_kst)  # UTC naive 변환
-
-            print(f"KST now: {now}, rounded_time_kst: {rounded_time_kst}, rounded_time_utc: {rounded_time_utc}")
+            # naive datetime (KST 기준)
+            rounded_kst_naive = rounded_time_kst.replace(tzinfo=None)
 
             cursor.execute("SELECT * FROM bidding_log WHERE bid_id = %s", (latest_bid_id,))
             bids = cursor.fetchall()
 
             # SMP 가격 조회 시 UTC naive datetime 사용
-            cursor.execute("SELECT price_krw FROM smp WHERE smp_time = %s", (rounded_time_utc,))
+            cursor.execute("SELECT price_krw FROM smp WHERE smp_time = %s", (rounded_kst_naive,))
             smp_row = cursor.fetchone()
-            print(rounded_time_utc)
+            print(rounded_kst_naive)
             print(smp_row)
             if not smp_row:
                 print("❌ SMP 데이터 없음")
@@ -122,18 +118,18 @@ def evaluate_bids():
                 if entity_id in accepted_entities:
                     cursor.execute("""
                         UPDATE relay_status SET status = 1, last_updated = %s WHERE relay_id = %s
-                    """, (rounded_time_utc, entity_id))
+                    """, (rounded_kst_naive, entity_id))
                     print(f"🟢 relay ON: {entity_id}")
                 else:
                     cursor.execute("""
                         UPDATE relay_status SET status = 0, last_updated = %s WHERE relay_id = %s
-                    """, (rounded_time_utc, entity_id))
+                    """, (rounded_kst_naive, entity_id))
                     print(f"🔴 relay OFF: {entity_id}")
 
             for off_id in off_targets:
                 cursor.execute("""
                     UPDATE relay_status SET status = 0, last_updated = %s WHERE relay_id = %s
-                """, (rounded_time_utc, off_id))
+                """, (rounded_kst_naive, off_id))
                 print(f"⚫ relay FORCE OFF: {off_id} (accepted된 발전소 보호)")
 
             conn.commit()
