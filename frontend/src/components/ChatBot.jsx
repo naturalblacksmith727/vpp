@@ -66,7 +66,7 @@ function ChatBot() {
     fetchData();
 
     // 이후 10초마다 fetchData 반복 실행
-    const interval = setInterval(fetchData, 10000); // 10000ms = 10초
+    const interval = setInterval(fetchData, 10000); // 10초
 
     return () => clearInterval(interval);
   }, []);
