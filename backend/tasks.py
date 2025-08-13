@@ -267,7 +267,7 @@ def calculate_profit_incremental():
                         next_time = next_time.replace(tzinfo=KST)
 
                     time_diff_seconds = (next_time - current_time).total_seconds()
-                    revenue = power_kw * unit_price * (time_diff_seconds / 3600)
+                    revenue = power_kw * unit_price 
                     total_revenue += revenue
 
                 total_revenue = round(total_revenue, 2)
