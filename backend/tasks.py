@@ -145,26 +145,57 @@ def evaluate_bids():
         print(f"❌ 입찰 평가 오류: {e}")
 
 
-#수익 계산 - 가장 최근 수익을 계산한 시간 가져오기
+
+
+# 최근 계산 시점 구하기
 def get_last_calc_time():
+    conn = get_connection()
     try:
-        conn = get_connection()
         with conn.cursor() as cursor:
-            cursor.execute("SELECT MAX(timestamp) as last_time FROM profit_log")
+            # 1. 가장 최신 bid_id
+            cursor.execute("SELECT MAX(bid_id) AS latest_bid_id FROM bidding_result")
             row = cursor.fetchone()
-            if row and row["last_time"]:
-                last_time = row["last_time"]
-                # timezone 정보 없으면 KST로 맞추기
-                if last_time.tzinfo is None:
-                    last_time = last_time.replace(tzinfo=KST)
-                return last_time
-            else:
+            if not row or not row["latest_bid_id"]:
                 return datetime.now(KST) - timedelta(hours=1)
+
+            latest_bid_id = row["latest_bid_id"]
+
+            # 2. 해당 bid_id의 accepted 입찰 + bid_time
+            cursor.execute("""
+                SELECT br.entity_id, bl.bid_time
+                FROM bidding_result br
+                JOIN bidding_log bl
+                  ON br.bid_id = bl.bid_id AND br.entity_id = bl.entity_id
+                WHERE br.bid_id = %s AND br.result = 'accepted'
+            """, (latest_bid_id,))
+            accepted_rows = cursor.fetchall()
+
+            if not accepted_rows:
+                # 최신 시장에 accepted가 없으면 1시간 전부터 계산
+                return datetime.now(KST) - timedelta(hours=1)
+
+            # 모든 accepted는 같은 bid_time이라고 가정 → 첫 번째 사용
+            bid_time = accepted_rows[0]["bid_time"]
+            if bid_time.tzinfo is None:
+                bid_time = bid_time.replace(tzinfo=KST)
+
+            bid_apply_time = bid_time + timedelta(minutes=15)
+
+            # 3. profit_log 최신 계산 시각 확인
+            cursor.execute("SELECT MAX(timestamp) AS last_profit_time FROM profit_log")
+            row = cursor.fetchone()
+            if row and row["last_profit_time"]:
+                last_profit_time = row["last_profit_time"]
+                if last_profit_time.tzinfo is None:
+                    last_profit_time = last_profit_time.replace(tzinfo=KST)
+                return max(last_profit_time, bid_apply_time)
+            else:
+                return bid_apply_time
     finally:
         conn.close()
 
 
-# 수익 계산 
+# 수익 계산
 def calculate_profit_incremental():
     last_calc_time = get_last_calc_time()
     now = datetime.now(KST)
@@ -173,34 +204,37 @@ def calculate_profit_incremental():
     try:
         conn = get_connection()
         with conn.cursor() as cursor:
-            # 1. accepted 입찰 결과 중 최신 bid_id와 entity별 가격 조회
-            cursor.execute("""
-                SELECT br.entity_id, br.bid_price
-                FROM bidding_result br
-                JOIN (
-                    SELECT entity_id, MAX(id) AS max_id
-                    FROM bidding_result
-                    WHERE result = 'accepted'
-                    GROUP BY entity_id
-                ) latest ON br.id = latest.max_id
-            """)
-            accepted_bids = cursor.fetchall()
-            price_map = {bid['entity_id']: bid['bid_price'] for bid in accepted_bids}
+            # 1. 최신 bid_id
+            cursor.execute("SELECT MAX(bid_id) AS latest_bid_id FROM bidding_result")
+            latest_bid_id = cursor.fetchone()["latest_bid_id"]
 
-            if not price_map:
-                print("⚠️ 수익 계산할 accepted 입찰 없음")
+            if not latest_bid_id:
+                print("⚠️ 최신 bid_id 없음, 계산 종료")
                 return
 
-            # 2. relay 상태 확인 (ON인 entity만 처리)
+            # 2. 해당 bid_id의 accepted 입찰 정보 + 가격
             cursor.execute("""
-                SELECT relay_id FROM relay_status WHERE status = 1
-            """)
-            on_relays = set(row['relay_id'] for row in cursor.fetchall())
+                SELECT br.entity_id, bl.bid_price_per_kwh
+                FROM bidding_result br
+                JOIN bidding_log bl
+                  ON br.bid_id = bl.bid_id AND br.entity_id = bl.entity_id
+                WHERE br.bid_id = %s AND br.result = 'accepted'
+            """, (latest_bid_id,))
+            accepted_bids = cursor.fetchall()
+            price_map = {row["entity_id"]: row["bid_price_per_kwh"] for row in accepted_bids}
 
-            # 3. 각 entity별로 last_calc_time ~ now 구간 로그 조회 및 수익 계산
+            if not price_map:
+                print("⚠️ accepted 입찰 없음, 계산 종료")
+                return
+
+            # 3. relay ON 상태만 필터
+            cursor.execute("SELECT relay_id FROM relay_status WHERE status = 1")
+            on_relays = {row["relay_id"] for row in cursor.fetchall()}
+
+            # 4. 각 entity별 발전 로그 조회 & 수익 계산
             for entity_id, unit_price in price_map.items():
                 if entity_id not in on_relays:
-                    print(f"⛔ entity_id={entity_id} relay OFF, 계산 생략")
+                    print(f"⛔ entity_id={entity_id} relay OFF → 계산 생략")
                     continue
 
                 cursor.execute("""
@@ -211,6 +245,7 @@ def calculate_profit_incremental():
                     ORDER BY node_timestamp ASC
                 """, (entity_id, last_calc_time, now))
                 logs = cursor.fetchall()
+
                 if not logs:
                     print(f"⚠️ 발전 로그 없음: entity_id={entity_id}")
                     continue
@@ -218,13 +253,18 @@ def calculate_profit_incremental():
                 total_revenue = 0
                 for i in range(len(logs)):
                     current_log = logs[i]
-                    current_time = current_log['node_timestamp']
-                    power_kw = current_log['power_kw']
+                    current_time = current_log["node_timestamp"]
+                    if current_time.tzinfo is None:
+                        current_time = current_time.replace(tzinfo=KST)
+
+                    power_kw = current_log["power_kw"]
 
                     if i < len(logs) - 1:
-                        next_time = logs[i+1]['node_timestamp']
+                        next_time = logs[i+1]["node_timestamp"]
                     else:
                         next_time = now
+                    if next_time.tzinfo is None:
+                        next_time = next_time.replace(tzinfo=KST)
 
                     time_diff_seconds = (next_time - current_time).total_seconds()
                     revenue = power_kw * unit_price * (time_diff_seconds / 3600)
@@ -233,7 +273,7 @@ def calculate_profit_incremental():
                 total_revenue = round(total_revenue, 2)
                 print(f"✅ entity_id={entity_id} → {len(logs)}개 로그, 수익 {total_revenue}원")
 
-                # profit_log 저장 (현재 시각 기준)
+                # DB 저장
                 cursor.execute("""
                     INSERT INTO profit_log (timestamp, entity_id, unit_price, revenue_krw)
                     VALUES (%s, %s, %s, %s)
@@ -246,6 +286,7 @@ def calculate_profit_incremental():
         print(f"❌ calculate_profit_incremental 오류: {e}")
     finally:
         conn.close()
+
 
 
 # 스케줄러
