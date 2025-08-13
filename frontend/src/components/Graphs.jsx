@@ -46,20 +46,20 @@ function Graphs() {
   // 시간대별 태양광
   const solarData = nodeData
     ? nodeData.solar.map((item) => ({
-        시간: item.timestamp,
+        시간: item.timestamp.slice(11, 16),
         생산전력량: item.power_kw,
       }))
     : [];
 
   const windData = nodeData
     ? nodeData.wind.map((item) => ({
-        시간: item.timestamp,
+        시간: item.timestamp.slice(11, 16),
         생산전력량: item.power_kw,
       }))
     : [];
   const batteryData = nodeData
     ? nodeData.battery.map((item) => ({
-        시간: item.timestamp,
+        시간: item.timestamp.slice(11, 16),
         충전전력량: item.power_kw,
       }))
     : [];
