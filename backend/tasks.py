@@ -32,6 +32,7 @@ def round_to_nearest_15min(dt):
     return dt
 
 
+# 입찰 평가 
 def evaluate_bids():
     now = datetime.now(KST)
     print(f"[{now}] ⏳ 입찰 평가 시작")
@@ -40,6 +41,7 @@ def evaluate_bids():
         conn = get_connection()
         conn.begin()
         with conn.cursor() as cursor:
+            # 최신 bid_id 조회
             cursor.execute("""
                 SELECT bid_id 
                 FROM bidding_log 
@@ -54,33 +56,31 @@ def evaluate_bids():
 
             latest_bid_id = row["bid_id"]
 
+            # 중복 평가 방지
             cursor.execute("SELECT COUNT(*) AS cnt FROM bidding_result WHERE bid_id = %s", (latest_bid_id,))
             if cursor.fetchone()["cnt"] > 0:
                 print(f"⚠️ 이미 평가된 입찰 batch {latest_bid_id}, 생략")
                 conn.rollback()
                 return
 
+            # 현재 시각 반올림 후 string 변환
             rounded_time_kst = round_to_nearest_15min(now)
             rounded_time_str = rounded_time_kst.strftime('%Y-%m-%d %H:%M')
 
-
+            # 입찰 정보 조회
             cursor.execute("SELECT * FROM bidding_log WHERE bid_id = %s", (latest_bid_id,))
             bids = cursor.fetchall()
 
-            # SMP 가격 조회 시 kst naive datetime 사용
+            # SMP 가격 조회
             cursor.execute("SELECT price_krw FROM smp WHERE smp_time = %s", (rounded_time_str,))
             smp_row = cursor.fetchone()
-            print(rounded_time_kst)
-            print(smp_row)
             if not smp_row:
                 print("❌ SMP 데이터 없음")
                 conn.rollback()
                 return
-
             market_price = smp_row["price_krw"]
 
             accepted_entities = []
-            off_targets = set()
             evaluated_entities = []
 
             for bid in bids:
@@ -110,12 +110,8 @@ def evaluate_bids():
 
                 if result == 'accepted':
                     accepted_entities.append(entity_id)
-                    if entity_id == 1:
-                        off_targets.add(4)
-                    elif entity_id == 2:
-                        off_targets.add(5)
 
-            # relay_status 업데이트도 UTC naive datetime 사용
+            # relay_status 업데이트
             for entity_id in evaluated_entities:
                 if entity_id in accepted_entities:
                     cursor.execute("""
@@ -128,11 +124,13 @@ def evaluate_bids():
                     """, (rounded_time_str, entity_id))
                     print(f"🔴 relay OFF: {entity_id}")
 
-            for off_id in off_targets:
-                cursor.execute("""
-                    UPDATE relay_status SET status = 0, last_updated = %s WHERE relay_id = %s
-                """, (rounded_time_str, off_id))
-                print(f"⚫ relay FORCE OFF: {off_id} (accepted된 발전소 보호)")
+            # 1,2 rejected에 따라 4,5 ON 처리
+            if 1 not in accepted_entities:
+                cursor.execute("UPDATE relay_status SET status = 1, last_updated = %s WHERE relay_id = 4", (rounded_time_str,))
+                print("🟢 relay ON: 4 (1 rejected)")
+            if 2 not in accepted_entities:
+                cursor.execute("UPDATE relay_status SET status = 1, last_updated = %s WHERE relay_id = 5", (rounded_time_str,))
+                print("🟢 relay ON: 5 (2 rejected)")
 
             conn.commit()
             print(f"✅ 입찰 평가 완료: batch {latest_bid_id} (SMP {market_price})")
@@ -143,6 +141,7 @@ def evaluate_bids():
 
 
 
+# 수익 계산 
 def calculate_profit_incremental():
     now_kst = datetime.now(KST)
     now_str = now_kst.strftime("%Y-%m-%d %H:%M:%S")
