@@ -169,14 +169,15 @@ def calculate_profit_incremental():
             """, (latest_bid_id,))
             accepted_bids = cursor.fetchall()
 
-            # 3. 적용 시간 구간 필터링
+           # 3. 적용 시간 구간 필터링
             entity_price_map = {}
             for row in accepted_bids:
-                bid_time = datetime.strptime(row["bid_time_str"], "%Y-%m-%d %H:%M:%S")
-                start_apply = bid_time + timedelta(minutes=15)
-                end_apply = bid_time + timedelta(minutes=30)
-
-                if start_apply <= now_kst < end_apply:
+                bid_time_str = row["bid_time_str"]  # DB에서 문자열 그대로
+                bid_time = datetime.strptime(bid_time_str, "%Y-%m-%d %H:%M:%S")  # 연산용
+                start_apply_str = (bid_time + timedelta(minutes=15)).strftime("%Y-%m-%d %H:%M:%S")
+                end_apply_str = (bid_time + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+            
+                if start_apply_str <= now_str < end_apply_str:  # 문자열 비교
                     entity_price_map[row["entity_id"]] = row["bid_price_per_kwh"]
 
             if not entity_price_map:
@@ -189,24 +190,21 @@ def calculate_profit_incremental():
 
             saved_results = []  # 디버깅용 저장
 
-            # 5. 각 entity별 발전량 계산
+            # 5. 발전량 계산
             for entity_id, unit_price in entity_price_map.items():
                 if entity_id not in on_relays:
                     print(f"⛔ entity_id={entity_id} relay OFF → 생략")
                     continue
-
+            
+                start_str = (now_kst - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute("""
                     SELECT power_kw
                     FROM node_status_log
                     WHERE relay_id = %s
                     AND node_timestamp BETWEEN %s AND %s
-                """, (
-                    entity_id,
-                    (now_kst - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S"),
-                    now_str
-                ))
+                """, (entity_id, start_str, now_str))
                 logs = cursor.fetchall()
-
+                
                 if not logs:
                     print(f"⚠️ 발전 로그 없음: entity_id={entity_id}")
                     continue
