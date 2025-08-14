@@ -466,3 +466,6 @@ def run_bid_pipeline():
             sleep_until_next_quarter()
 
 
+#메인 실행 
+if __name__ == "__main__":
+    run_bid_pipeline()
