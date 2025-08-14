@@ -144,7 +144,7 @@ def evaluate_bids():
 
 
 def calculate_profit_incremental():
-    now_kst = datetime.now()
+    now_kst = datetime.now(KST)
     now_str = now_kst.strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n[{now_str}] ▶ 수익 계산 시작")
 
