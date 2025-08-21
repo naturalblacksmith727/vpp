@@ -281,7 +281,7 @@ def get_profit_result():
 def get_generate_bid():
     
     try:
-        time.sleep(15)
+        time.sleep(25)
         conn = get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
