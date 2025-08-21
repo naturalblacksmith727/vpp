@@ -280,14 +280,20 @@ def get_profit_result():
 # 3. GET/generate_bid: 생성한 입찰 보여주기 (서버 -> 프론트)
 @vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"])
 def get_generate_bid():
+    
     try:
+        # 입찰이 완성될 때까지 잠시 대기 
+        time.sleep(25)
+
         conn = get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
                 SELECT *
                 FROM bidding_log
-                ORDER BY bid_time DESC
-                LIMIT 3
+                WHERE bid_id = (
+                    SELECT COALESCE(MAX(bid_id), 0) + 1
+                    FROM bidding_result)
+                ORDER BY entity_id ASC;
             """
             cursor.execute(sql)
             bids = cursor.fetchall()
