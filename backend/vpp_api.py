@@ -93,9 +93,8 @@ def is_timeout():
     
 
 # 가장 가까운 15분 단위로 반올림
-def round_to_nearest_15min(dt: datetime = None):
-    if dt is None:
-        dt = datetime.now(KST)
+def round_to_nearest_15min():
+    dt = datetime.now(KST)
     discard = timedelta(minutes=dt.minute % 15,
                         seconds=dt.second,
                         microseconds=dt.microsecond)
@@ -557,9 +556,6 @@ def fetch_smp_for_time_blocks(base_time):
 
         for offset in today_offsets:
             dt = base_time + timedelta(minutes=offset)
-            
-            # ✅ KST → UTC 변환 후 문자열 포맷
-            dt_utc = dt.astimezone(UTC)
             dt_str = dt_utc.strftime("%Y-%m-%d %H:%M:%S")
 
             query = "SELECT price_krw FROM smp WHERE smp_time = %s LIMIT 1"
