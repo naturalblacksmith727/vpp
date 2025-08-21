@@ -556,7 +556,7 @@ def fetch_smp_for_time_blocks(base_time):
 
         for offset in today_offsets:
             dt = base_time + timedelta(minutes=offset)
-            dt_str = dt_utc.strftime("%Y-%m-%d %H:%M:%S")
+            dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
 
             query = "SELECT price_krw FROM smp WHERE smp_time = %s LIMIT 1"
             cursor.execute(query, (dt_str,))
