@@ -282,7 +282,7 @@ def get_generate_bid():
     
     try:
         # 입찰이 완성될 때까지 잠시 대기 
-        time.sleep(25)
+        time.sleep(20)
 
         conn = get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
