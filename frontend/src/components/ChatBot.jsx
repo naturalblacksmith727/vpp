@@ -62,13 +62,36 @@ function ChatBot() {
           setError("서버 연결에 실패했습니다.");
         });
     };
+    // --- 한국시간 기반 next tick 계산 ---
+    const now = new Date();
+    const kstNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Seoul" })
+    );
+
+    const minutes = kstNow.getMinutes();
+    const seconds = kstNow.getSeconds();
+
+    // 다음 15분 단위 구하기 (0, 15, 30, 45)
+    const nextQuarter = Math.ceil(minutes / 15) * 15;
+    const waitMinutes = (nextQuarter - minutes + 60) % 60;
+
+    // "정각 + 1분" 타겟 시점까지 남은 시간(ms)
+    const waitMs = (waitMinutes * 60 + (60 - seconds)) * 1000;
+
     // 페이지 로드시 최초 1회 데이터 가져오기
     fetchData();
 
-    // 이후 10초마다 fetchData 반복 실행
-    const interval = setInterval(fetchData, 10000); // 10초
+    // waitMs 후 실행 -> 이후 15분마다 반복
+    const timeout = setTimeout(() => {
+      fetchData();
+      const interval = setInterval(fetchData, 15 * 60 * 1000); // 15분마다 실행
+      timeoutTimerRef.current = interval;
+    }, waitMs);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(timeoutTimerRef.current);
+    };
   }, []);
 
   // bid_edit_fix 호출 함수
