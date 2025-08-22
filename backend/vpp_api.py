@@ -269,7 +269,7 @@ def get_generate_bid():
         time.sleep(60)  # 1분 대기
 
         conn = get_connection()
-        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+        with conn.cursor() as cursor:
             sql = """
                 SELECT *
                 FROM bidding_log
@@ -314,7 +314,7 @@ def get_generate_bid():
 def get_bidding_result():
     try:
         conn = get_connection()
-        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+        with conn.cursor() as cursor:
             sql = """
                 SELECT entity_id, result, bid_price
                 FROM bidding_result
