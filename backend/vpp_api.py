@@ -284,7 +284,7 @@ def get_generate_bid():
 
         result = []
         for bid in bids:
-            print("bid f{bid["bid_id"]}")
+            print(f"bid_id: {bid["bid_id"]}")
             result.append({
                 "bid_id": bid["bid_id"],
                 "entity_id": bid["entity_id"],
@@ -323,7 +323,7 @@ def get_bidding_result():
 
         if results:
             current_result_bid_id = results[0]["bid_id"]
-            print("current result bid id: {currrent_result_bid_id}")
+            print(f"current result bid id: {currrent_result_bid_id}")
 
         return jsonify({
             "status": "success",
