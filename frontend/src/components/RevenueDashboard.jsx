@@ -26,8 +26,8 @@ function RevenueDashboard() {
     // 페이지 로드시 최초 1회 데이터 가져오기
     fetchData();
 
-    // 이후 15분마다 fetchData 반복 실행
-    const interval = setInterval(fetchData, 900000);
+    // 이후 1분마다 fetchData 반복 실행
+    const interval = setInterval(fetchData, 60000);
 
     return () => clearInterval(interval);
   }, []);

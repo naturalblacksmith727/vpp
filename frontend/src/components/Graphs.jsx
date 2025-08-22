@@ -37,32 +37,37 @@ function Graphs() {
     // 페이지 로드시 최초 1회 데이터 가져오기
     fetchData();
 
-    // 이후 20초마다 fetchData 반복 실행
-    const interval = setInterval(fetchData, 20000); // 20초
+    // 이후 60초마다 fetchData 반복 실행
+    const interval = setInterval(fetchData, 60000); // 60초
 
     return () => clearInterval(interval);
   }, []);
 
-  // 시간대별 태양광
-  const solarData = nodeData
-    ? nodeData.solar.map((item) => ({
-        시간: item.timestamp.slice(11, 16),
-        생산전력량: item.power_kw,
-      }))
-    : [];
+  // 시간대별로 생산전력량 합산하는 함수
+  const sumByTime = (data, keyName) => {
+    const grouped = {};
 
-  const windData = nodeData
-    ? nodeData.wind.map((item) => ({
-        시간: item.timestamp.slice(11, 16),
-        생산전력량: item.power_kw,
-      }))
-    : [];
-  const batteryData = nodeData
-    ? nodeData.battery.map((item) => ({
-        시간: item.timestamp.slice(11, 16),
-        충전전력량: item.power_kw,
-      }))
-    : [];
+    data.forEach((item) => {
+      // HH:mm 포맷으로 시간만 추출
+      const time = item.timestamp.slice(11, 16);
+      if (!grouped[time]) {
+        grouped[time] = 0;
+      }
+      grouped[time] += item.power_kw;
+    });
+
+    // 그래프용 배열로 변환
+    return Object.entries(grouped).map(([time, value]) => ({
+      시간: time,
+      [keyName]: Number(value.toFixed(6)),
+    }));
+  };
+
+  // 시간대별 태양광
+  const solarData = nodeData ? sumByTime(nodeData.solar, "생산전력량") : [];
+
+  const windData = nodeData ? sumByTime(nodeData.wind, "생산전력량") : [];
+  const batteryData = nodeData ? sumByTime(nodeData.battery, "충전전력량") : [];
 
   if (!nodeData) {
     return <p>데이터 로딩 중...</p>;
