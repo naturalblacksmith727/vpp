@@ -65,8 +65,8 @@ function ChatBot() {
     // 페이지 로드시 최초 1회 데이터 가져오기
     fetchData();
 
-    // 이후 10초마다 fetchData 반복 실행
-    const interval = setInterval(fetchData, 10000); // 10초
+    // 이후 15분 45초마다 fetchData 반복 실행
+    const interval = setInterval(fetchData, 945000); // 15분 45초
 
     return () => clearInterval(interval);
   }, []);
