@@ -19,8 +19,8 @@ function Graphs() {
   useEffect(() => {
     const fetchData = () => {
       axios
-        //.get("https://aivpp.duckdns.org/api/serv_fr/node_status")
-        .get("/api/serv_fr/node_status")
+        .get("https://aivpp.duckdns.org/api/serv_fr/node_status")
+        //.get("/api/serv_fr/node_status")
         .then((response) => {
           if (response.data.status === "success") {
             setNodeData(response.data.data);
@@ -59,7 +59,7 @@ function Graphs() {
     // 그래프용 배열로 변환
     return Object.entries(grouped).map(([time, value]) => ({
       시간: time,
-      [keyName]: Number(value.toFixed(2)),
+      [keyName]: Number(value.toFixed(6)),
     }));
   };
 
