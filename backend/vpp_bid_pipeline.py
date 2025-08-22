@@ -12,7 +12,7 @@ KST = pytz.timezone("Asia/Seoul")
 
 
 # ✅ LLM 초기화
-llm = ChatOpenAI(model='gpt-4o', temperature=0.3)
+llm = ChatOpenAI(model='gpt-4mini', temperature=0.3)
 
 # ✅ 키 변환 매핑 (AI 결과 → DB 컬럼명)
 KEY_MAPPING = {
