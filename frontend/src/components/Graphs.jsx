@@ -19,8 +19,8 @@ function Graphs() {
   useEffect(() => {
     const fetchData = () => {
       axios
-        .get("https://aivpp.duckdns.org/api/serv_fr/node_status")
-        //.get("/api/serv_fr/node_status")
+        //.get("https://aivpp.duckdns.org/api/serv_fr/node_status")
+        .get("/api/serv_fr/node_status")
         .then((response) => {
           if (response.data.status === "success") {
             setNodeData(response.data.data);
