@@ -266,7 +266,6 @@ def get_profit_result():
 @vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"])
 def get_generate_bid():
     try:
-        time.sleep(60)  # 1분 대기
 
         conn = get_connection()
         with conn.cursor() as cursor:
