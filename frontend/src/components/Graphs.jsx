@@ -64,10 +64,22 @@ function Graphs() {
   };
 
   // 시간대별 태양광
-  const solarData = nodeData ? sumByTime(nodeData.solar, "생산전력량") : [];
+  const solarData = nodeData
+    ? sumByTime(nodeData.solar, "생산전력량", "power_kw")
+    : [];
 
-  const windData = nodeData ? sumByTime(nodeData.wind, "생산전력량") : [];
-  const batteryData = nodeData ? sumByTime(nodeData.battery, "충전전력량") : [];
+  const windData = nodeData
+    ? sumByTime(nodeData.wind, "생산전력량", "power_kw")
+    : [];
+  const batteryData = nodeData
+    ? Object.values(
+        nodeData.battery.reduce((acc, item) => {
+          const time = item.timestamp.slice(11, 16);
+          acc[time] = { 시간: time, 현재충전상태: item.soc }; // 같은 시간대면 마지막 값으로 덮어쓰기
+          return acc;
+        }, {})
+      )
+    : [];
 
   if (!nodeData) {
     return <p>데이터 로딩 중...</p>;
@@ -173,14 +185,14 @@ function Graphs() {
               />
               <YAxis
                 label={{
-                  value: "충전 전력량",
+                  value: "현재충전상태",
                   position: "insideTopLeft",
                   offset: 0,
                   dy: -20,
                 }}
               />
               <Tooltip />
-              <Line type="monotone" dataKey="충전전력량" stroke="#8884d8" />
+              <Line type="monotone" dataKey="현재충전상태" stroke="#8884d8" />
             </LineChart>
           </div>
         </div>
