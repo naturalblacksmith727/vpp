@@ -80,23 +80,21 @@ class ActionEnum(str, Enum):
     CONFIRM = "confirm"
     TIMEOUT = "timeout"
 
+KST = pytz.timezone("Asia/Seoul")
+
 # 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
-
-
 def is_timeout():
-    korea = pytz.timezone("Asia/Seoul")
-    now = datetime.now(korea)
+    now = datetime.now(KST)
     minute = (now.minute // 15) * 15
     start_time = now.replace(minute=minute, second=0, microsecond=0)
     timeout_time = start_time + timedelta(minutes=14)
 
     return now > timeout_time
-
+    
 
 # 가장 가까운 15분 단위로 반올림
-def round_to_nearest_15min(dt: datetime = None):
-    if dt is None:
-        dt = datetime.now()
+def round_to_nearest_15min():
+    dt = datetime.now(KST)
     discard = timedelta(minutes=dt.minute % 15,
                         seconds=dt.second,
                         microseconds=dt.microsecond)
@@ -281,14 +279,18 @@ def get_profit_result():
 # 3. GET/generate_bid: 생성한 입찰 보여주기 (서버 -> 프론트)
 @vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"])
 def get_generate_bid():
+    
     try:
+        time.sleep(25)
         conn = get_connection()
         with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
                 SELECT *
                 FROM bidding_log
-                ORDER BY bid_time DESC
-                LIMIT 3
+                WHERE bid_id = (
+                    SELECT COALESCE(MAX(bid_id), 0) + 1
+                    FROM bidding_result)
+                ORDER BY entity_id ASC;
             """
             cursor.execute(sql)
             bids = cursor.fetchall()
@@ -537,8 +539,6 @@ def put_edit_fix():
 
 # 1. GET/get_smp: SMP 데이터 요청 (LLM -> 서버)
 # 15분마다 smp 데이터 가져오기
-
-
 def fetch_smp_for_time_blocks(base_time):
     try:
         conn = get_connection()
@@ -546,23 +546,24 @@ def fetch_smp_for_time_blocks(base_time):
 
         smp_data = {}
 
-        # 오늘 날짜 (base_time 기준)
         today_date = base_time.date()
         base_time_key = today_date.isoformat()
 
-        # 오늘: base_time 이전 3개
         today_offsets = [-45, -30, -15]
         smp_data[base_time_key] = []
 
         for offset in today_offsets:
             dt = base_time + timedelta(minutes=offset)
+            dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+
             query = "SELECT price_krw FROM smp WHERE smp_time = %s LIMIT 1"
-            cursor.execute(query, (dt,))
+            cursor.execute(query, (dt_str,))
             result = cursor.fetchone()
             smp_data[base_time_key].append(
-                result["price_krw"] if result else None)
+                result["price_krw"] if result else None
+            )
 
-        # 전날 ~ 3일 전까지: base_time 기준 - N일
+        # 전날 ~ 3일 전
         for i in range(1, 4):
             day_dt = base_time - timedelta(days=i)
             key = day_dt.date().isoformat()
@@ -570,14 +571,17 @@ def fetch_smp_for_time_blocks(base_time):
 
             for offset in [-15, 0, 15, 30]:
                 dt = day_dt + timedelta(minutes=offset)
+                dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+
                 query = "SELECT price_krw FROM smp WHERE smp_time = %s LIMIT 1"
-                cursor.execute(query, (dt,))
+                cursor.execute(query, (dt_str,))
                 result = cursor.fetchone()
-                smp_data[key].append(result["price_krw"] if result else None)
+                smp_data[key].append(
+                    result["price_krw"] if result else None
+                )
 
         conn.close()
 
-        # 데이터가 모두 None일 경우 no_data 처리
         if all(all(v is None for v in values) for values in smp_data.values()):
             return {"error": "no_data"}
 
