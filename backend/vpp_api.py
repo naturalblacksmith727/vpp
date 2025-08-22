@@ -139,7 +139,7 @@ def get_node_result():
         with conn.cursor() as cursor:
             # 태양광 시간별 전력량
             sql = """
-            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw, round(avg(soc),4) AS soc
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),6) AS power_kw
             FROM node_status_log
             WHERE relay_id IN (1, 4)
                 AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
@@ -151,11 +151,11 @@ def get_node_result():
 
             
             data["solar"] = [{"timestamp": row["timestamp"].strftime(
-                '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
+                '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
 
             # 풍력 시간별 전력량
             sql = """
-            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw, round(avg(soc),4) AS soc
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),6) AS power_kw
             FROM node_status_log
             WHERE relay_id IN (2, 5)
                 AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
@@ -167,11 +167,11 @@ def get_node_result():
 
             
             data["wind"] = [{"timestamp": row["timestamp"].strftime(
-                '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"], "soc":row["soc"]} for row in rows]
+                '%Y-%m-%d %H:%M:%S'), "power_kw": row["power_kw"]} for row in rows]
 
             # 배터리 시간별 순충전전력량 (relay_id 4,5는 더하고 3은 뺌)
             sql = """
-            SELECT charging.timestamp AS timestamp, ROUND(charging.power_kw - COALESCE(usaged.power_kw,0),2) AS power_kw
+            SELECT charging.timestamp AS timestamp, ROUND(charging.power_kw - COALESCE(usaged.power_kw,0),6) AS power_kw
             FROM
                 (
                     SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),2) AS power_kw
@@ -226,7 +226,7 @@ def get_profit_result():
 
         with conn.cursor() as cursor:
             sql = """
-            SELECT round(sum(power_kw*(20.0/3600)),2) AS total_generation_kwh
+            SELECT round(sum(power_kw*(20.0/3600)),6) AS total_generation_kwh
             FROM node_status_log 
             WHERE relay_id IN (1,2,4,5)
             """
