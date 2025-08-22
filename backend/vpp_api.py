@@ -139,7 +139,7 @@ def get_node_result():
         with conn.cursor() as cursor:
             # 태양광 시간별 전력량
             sql = """
-            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),6) AS power_kw
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw * (20.0 / 3600)),6) AS power_kw
             FROM node_status_log
             WHERE relay_id IN (1, 4)
                 AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
@@ -155,7 +155,7 @@ def get_node_result():
 
             # 풍력 시간별 전력량
             sql = """
-            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),6) AS power_kw
+            SELECT node_timestamp AS timestamp, ROUND(sum(power_kw * (20.0 / 3600)),6) AS power_kw
             FROM node_status_log
             WHERE relay_id IN (2, 5)
                 AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR  
@@ -174,7 +174,7 @@ def get_node_result():
             SELECT charging.timestamp AS timestamp, ROUND(charging.power_kw - COALESCE(usaged.power_kw,0),6) AS power_kw
             FROM
                 (
-                    SELECT node_timestamp AS timestamp, ROUND(sum(power_kw),6) AS power_kw
+                    SELECT node_timestamp AS timestamp, ROUND(sum(power_kw * (20.0 / 3600)),6) AS power_kw
                     FROM node_status_log
                     WHERE relay_id IN (4,5)
                         AND node_timestamp >= (SELECT MAX(node_timestamp) FROM node_status_log) - INTERVAL 24 HOUR
