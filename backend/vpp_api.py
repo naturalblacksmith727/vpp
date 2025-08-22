@@ -261,21 +261,18 @@ def get_profit_result():
             "fail_reason": "server_error"
         })
 
-
-# 3. GET/generate_bid: 생성한 입찰 보여주기 (서버 -> 프론트)
 @vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"])
 def get_generate_bid():
+    global current_result_bid_id
     try:
-
         conn = get_connection()
         with conn.cursor() as cursor:
             sql = """
                 SELECT *
                 FROM bidding_log
-                ORDER BY bid_time DESC
-                LIMIT 3
+                WHERE bid_id = %s
             """
-            cursor.execute(sql)
+            cursor.execute(sql, (current_result_bid_id + 1,))
             bids = cursor.fetchall()
         conn.close()
 
@@ -308,37 +305,29 @@ def get_generate_bid():
         })
 
 
-# 4. GET/bidding_result: 입찰 결과 내용 보여주기 (서버 -> 프론트)
 @vpp_blueprint.route("/serv_fr/bidding_result", methods=["GET"])
 def get_bidding_result():
+    global current_result_bid_id
     try:
         conn = get_connection()
         with conn.cursor() as cursor:
             sql = """
-                SELECT entity_id, result, bid_price
+                SELECT entity_id, result, bid_price, bid_id
                 FROM bidding_result
-                WHERE bid_id = (
-                    SELECT MAX(bid_id)
-                    FROM bidding_result
-                )
+                WHERE bid_id = (SELECT MAX(bid_id) FROM bidding_result)
             """
             cursor.execute(sql)
             results = cursor.fetchall()
         conn.close()
 
-        if results is None:
-            return jsonify({
-                "status": "success",
-                "bid": None,
-                "fail_reason": "missing_field:bidding_result"
-            })
-        
+        if results:
+            current_result_bid_id = results[0]["bid_id"]
+
         return jsonify({
             "status": "success",
             "bid": results,
             "fail_reason": None
         })
-
     except Exception:
         return jsonify({
             "status": "success",
