@@ -76,7 +76,7 @@ function ChatBot() {
     const waitMinutes = (nextQuarter - minutes + 60) % 60;
 
     // "정각 + 1분" 타겟 시점까지 남은 시간(ms)
-    const waitMs = (waitMinutes * 60 + (60 - seconds)) * 1000;
+    const waitMs = (waitMinutes * 60 + (100 - seconds)) * 1000;
 
     // 페이지 로드시 최초 1회 데이터 가져오기
     fetchData();
