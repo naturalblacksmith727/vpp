@@ -239,6 +239,7 @@ function ChatBot() {
           }
           // 이전 타이머 제거
           if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+          timeoutTimerRef.current = null;
           setIsBiddingActive(false);
 
           const result = await sendBidEditFix("confirm");
@@ -278,6 +279,7 @@ function ChatBot() {
           }
           // 이전 타이머 제거
           if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+          timeoutTimerRef.current = null;
 
           awaitingEditInputRef.current = true;
           setIsBiddingActive(false);
