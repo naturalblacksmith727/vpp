@@ -15,7 +15,7 @@
 
 <2024 6월 14일 SMP>
 
-![image.png](vpp/readme 자료/image.png)
+![image.png](readme 자료/image.png)
 
 # 솔루션
 
@@ -36,11 +36,11 @@
 
 # 시스템 구조도
 
-![image.png](vpp/readme 자료/image 1.png)
+![image.png](readme 자료/image 1.png)
 
 - <아두이노 세부 구조>
     
-    ![image.png](vpp/readme 자료/image 2.png)
+    ![image.png](readme 자료/image 2.png)
     
 # 데이터 베이스 
 [데이터 베이스 보기](backend/README.md#데이터베이스)
@@ -126,7 +126,7 @@ PM [문지원]
 
 - 풍력 발전 모터 [https://m.robotscience.kr/goods/view?no=20588](https://m.robotscience.kr/goods/view?no=20588)
 
-![image.png](vpp/readme 자료/image 4.png)
+![image.png](readme 자료/image 4.png)
 
 배터리 
 
