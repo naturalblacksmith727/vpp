@@ -313,9 +313,9 @@ function ChatBot() {
       const now = new Date();
       const minutes = now.getMinutes();
 
-      // 00, 15, 30, 45분만, 중복 방지
+      // 01, 16, 31, 46분만, 중복 방지
       if (
-        [0, 15, 30, 45].includes(minutes) &&
+        [1, 16, 31, 46].includes(minutes) &&
         lastMinuteRef.current !== minutes &&
         bidData
       ) {
@@ -395,7 +395,19 @@ function ChatBot() {
   }, [messages]);
 
   if (!bidData) {
-    return <p>데이터 로딩 중...</p>;
+    return (
+      <div className="w-full px-4">
+        <h2 className="mb-6 text-4xl font-bold text-center">챗봇 대화창</h2>
+        <div className="w-full border border-gray-300 p-4 rounded-lg">
+          <div className="h-96 flex items-center justify-center">
+            <LoadingDots />
+            <span className="ml-2">
+              데이터를 불러오는 중입니다... 잠시만 기다려주세요.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

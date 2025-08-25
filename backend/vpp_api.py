@@ -464,7 +464,6 @@ def put_edit_fix():
 
             with conn.cursor() as cursor:
                 for bid in bids:
-                    bid_id = bid["bid_id"]
                     entity_name = bid["entity_name"]
                     new_price = bid["bid_price_per_kwh"]
 
@@ -479,11 +478,12 @@ def put_edit_fix():
                         })
 
                     sql = """
-                    SELECT *
-                    FROM bidding_log
-                    WHERE bid_id = %s and entity_id = %s
+                    SELECT bid_id FROM bidding_log
+                    WHERE entity_id=%s
+                    ORDER BY bid_time DESC
+                    LIMIT 1
                     """
-                    cursor.execute(sql,(bid_id, target_entity_id))
+                    cursor.execute(sql,(target_entity_id))
 
                     row = cursor.fetchone()
 
