@@ -80,8 +80,6 @@ class ActionEnum(str, Enum):
     CONFIRM = "confirm"
     TIMEOUT = "timeout"
 
-# 결과가 나온 최신 입찰 건 - 서버-프론트 generate_bid & bid_result 용 
-current_result_bid_id = 0
 
 # 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
 kst = pytz.timezone("Asia/Seoul")
@@ -261,18 +259,19 @@ def get_profit_result():
             "fail_reason": "server_error"
         })
 
+# 3. GET/generate_bid: 생성한 입찰 보여주기 (서버 -> 프론트)
 @vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"])
 def get_generate_bid():
-    global current_result_bid_id
     try:
         conn = get_connection()
-        with conn.cursor() as cursor:
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
                 SELECT *
                 FROM bidding_log
-                WHERE bid_id = %s
+                ORDER BY bid_time DESC
+                LIMIT 3
             """
-            cursor.execute(sql, (current_result_bid_id + 1,))
+            cursor.execute(sql)
             bids = cursor.fetchall()
         conn.close()
 
@@ -284,7 +283,6 @@ def get_generate_bid():
 
         result = []
         for bid in bids:
-            print(f"bid_id: {bid["bid_id"]}")
             result.append({
                 "bid_id": bid["bid_id"],
                 "entity_id": bid["entity_id"],
@@ -306,36 +304,45 @@ def get_generate_bid():
         })
 
 
+# 4. GET/bidding_result: 입찰 결과 내용 보여주기 (서버 -> 프론트)
 @vpp_blueprint.route("/serv_fr/bidding_result", methods=["GET"])
 def get_bidding_result():
-    global current_result_bid_id
     try:
         conn = get_connection()
-        with conn.cursor() as cursor:
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
-                SELECT entity_id, result, bid_price, bid_id
+                SELECT entity_id, result, bid_price
                 FROM bidding_result
-                WHERE bid_id = (SELECT MAX(bid_id) FROM bidding_result)
+                WHERE bid_id = (
+                    SELECT MAX(bid_id) 
+                    FROM bidding_result
+                )
             """
             cursor.execute(sql)
             results = cursor.fetchall()
         conn.close()
 
-        if results:
-            current_result_bid_id = results[0]["bid_id"]
-            print(f"current result bid id: {currrent_result_bid_id}")
-
+        if results is None:
+            return jsonify({
+                "status": "success",
+                "bid": None,
+                "fail_reason": "missing_field:bidding_result"
+            })
+        
         return jsonify({
             "status": "success",
             "bid": results,
             "fail_reason": None
         })
+
     except Exception:
         return jsonify({
             "status": "success",
             "bid": None,
             "fail_reason": "server_error"
         })
+
+
 
 
 # 5. PUT/bid_edit_fix: 사용자 응답 처리 및 최종 입찰 확정(프론트엔드->서버)
