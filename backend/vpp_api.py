@@ -359,49 +359,23 @@ def put_edit_fix():
         try:
             conn = get_connection()
             with conn.cursor() as cursor:
-                # 가장 최근의 bid_time에 해당하는 bid_id 찾기
+                # 마지막 입찰 데이터 확인
                 cursor.execute("""
-                    SELECT MAX(bid_time) AS latest_time
+                    SELECT COUNT(*) AS count
                     FROM bidding_log
+                    WHERE entity_id IN (1,2,3)
                 """)
-                latest_time_row = cursor.fetchone()
-                latest_time = latest_time_row["latest_time"]
-
-                if not latest_time:
+                result = cursor.fetchone()
+                if result["count"] == 0:
                     return jsonify({
                         "status": StatusEnum.FAILED,
-                        "action": ActionEnum.TIMEOUT,
-                        "fail_reason": "Timeout failed: No bid data found"
+                        "action": action,
+                        "fail_reason": "Cannot confirm: No existing bid data found"
                     })
-
-                # 최신 시간에 해당하는 bid_id 목록 가져오기
-                cursor.execute("""
-                    SELECT bid_id, entity_id
-                    FROM bidding_log
-                    WHERE bid_time = %s
-                """, (latest_time,))
-                bid_rows = cursor.fetchall()
-
-                if not bid_rows:
-                    return jsonify({
-                        "status": StatusEnum.FAILED,
-                        "action": ActionEnum.TIMEOUT,
-                        "fail_reason": "Timeout failed: No bids to update"
-                    })
-
-                # 각 입찰 항목의 가격을 0으로 업데이트
-                for row in bid_rows:
-                    cursor.execute("""
-                        UPDATE bidding_log
-                        SET bid_price_per_kwh = 0
-                        WHERE bid_id = %s AND entity_id = %s
-                    """, (row["bid_id"], row["entity_id"]))
-
-                conn.commit()
 
                 return jsonify({
                     "status": StatusEnum.SUCCESS,
-                    "action": ActionEnum.TIMEOUT,
+                    "action": action,
                     "fail_reason": None
                 })
         except Exception as e:
