@@ -18,7 +18,195 @@ app.py 실행 → Flask 서버 시작
 
 ## 프론트↔서버 ↔ LLM
 
-![rest api 구조.png](REST%20API%20spec%20233c8e843beb80f39e6deb7aabe9be3d/rest_api_%E1%84%80%E1%85%AE%E1%84%8C%E1%85%A9.png)
+![rest api 구조.png](vpp/readme 자료/rest_api_구조.png)
+
+# 데이터베이스
+
+![image.png](vpp/readme 자료/image 3.png)
+
+### 요소 테이블
+
+### 0-1. `entity` – 발전소, 배터리, 아두이노 엔티티를 정리한 표
+
+| 칼럼명 | 타입 | 설명 |
+| --- | --- | --- |
+| entity_id | INT (PK) | 각 엔티티(설비)의 고유 식별 번호 |
+| entity_type | ENUM | 엔티티 종류 (solar, wind, battery, grid) |
+| entity_name | VARCHAR | 엔티티의 이름 또는 별칭 (예: 태양광, 아두이노) |
+
+EX)
+
+| entity_id | entity_type | entity_name |
+| --- | --- | --- |
+| 1 | solar | 태양광 |
+| 2 | wind | 풍력 |
+| 3 | battery | 배터리 |
+| 4 | load  | 아두이노(부하) |
+
+### 0-2. `relay` – 릴레이를 정의한 표
+
+| 칼럼명 | 타입 | 설명 |
+| --- | --- | --- |
+| relay_id | INT (PK) | 각 릴레이의 고유 식별 번호 |
+| source_entity_id | INT (FK) | 릴레이에 연결된 시작 entity_id. enity 테이블의 entity_id 참조. |
+| target_entity_id | INT | 릴레이에 연결된 끝 entity_id. enity 테이블의 entity_id 참조. |
+| description | VARCHAR | 릴레이 설명  |
+
+EX)
+
+| **relay_id** | **source_entity_id** | **target_entity_id** | **description** |
+| --- | --- | --- | --- |
+| 1 | 1 | 4 | 태양- 부하 |
+| 2 | 2 | 4 | 풍력 - 부하 |
+| 3 | 3 | 4 | 배터리- 부하 |
+| 4 | 1 | 3 | 태양 - 배터리 |
+| 5 | 2 | 3 | 풍력 - 배터리  |
+
+아두이노 실제 설계
+
+| **relay_id** | **source_entity_id** | **target_entity_id** | **description** |
+| --- | --- | --- | --- |
+| 1 | 1 | 4 | 태양- 부하 |
+| 2 | 2 | 4 | 풍력 - 부하 |
+| 3 | 1 | 3 | 태양 - 배터리 |
+| 4 | 2 | 3 | 풍력 - 배터리  |
+| 5 | 3 | 4 | 배터리- 부하 |
+
+### 1. `node_status_log` – 발전소 및 배터리 상태 실시간 기록 [HW → 아두이노 → SQL]
+
+| 컬럼명 | 타입 | 설명 |
+| --- | --- | --- |
+| id | INT (PK, AI) | 고유 ID |
+| timestamp | DATETIME | 측정 시간 (1분 단위) |
+| relay_id | INT (FK) | 전력을 보내는 entity, entity 테이블의 entity_id를 참조 (1,2,3 만 올 수 있음) |
+| power_kw | FLOAT  | 순간 전력(발전 또는 소비)량 [kW]. source에서 target으로 흐르는 전력의 크기 |
+| soc | FLOAT (NULLABLE) | state of charge(충전 상태, %). 배터리 관련 데이터에만 기록되며, 그 외에는 NULL
+[source_id or target_id가 3일때] |
+
+Ex)
+
+| **id** | **timestamp** | **relay_id** | **power_kw** | **soc** |
+| --- | --- | --- | --- | --- |
+| 1 | 2025-07-05 13:15 | 1 | 0.45 | NULL |
+| 2 | 2025-07-05 13:15 | 3 | 0.20 | 68.2 |
+| 3 | 2025-07-05 13:16 | 1 | 0.10 | 68.3 |
+
+### 2. relay_status 릴레이 현 시점의 상태를 기록 [HW ↔ 아두이노 ↔ SQL ↔ 알고리즘]
+
+| **칼럼명** | **타입** | **설명** |
+| --- | --- | --- |
+| relay_id | INT | 릴레이 식별자, Primary Key |
+| status | TINYINT(1) | 1=ON, 0=OFF (현재 상태) |
+| last_updated | DATETIME | 마지막 변경 시각 |
+
+EX)
+
+| **relay_id** | **status** | **last_updated** |
+| --- | --- | --- |
+| 1 | 1 | 2025-07-17 13:15:00 |
+| 2 | 0 | 2025-07-17 13:15:00 |
+| 3 | 1 | 2025-07-17 13:15:00 |
+| 4 | 0 | 2025-07-17 13:15:00 |
+| 5 | 1 | 2025-07-17 13:15:00 |
+
+### 입찰 테이블
+
+### 3. `bidding_log` – LLM이 생성한 입찰 제안 정보 기록 [LLM → SQL] 입찰 생길 때마다 3 row씩 증가
+
+| **컬럼명** | **타입** | **설명** |
+| --- | --- | --- |
+| id | INT (PK, AI) | 입찰 고유 번호 |
+| timestamp | DATETIME | 입찰 시각 (시장 시간과 동일) |
+| entity_id | text (FK) | 발전소 id (enity.entity_id 참조) |
+| bid_quantity_kwh | FLOAT | 거래 제안량 (kWh) |
+| bid_price_per_kwh | FLOAT | 제안 단가 (원/kWh 등) |
+| llm_reasoning | TEXT | LLM의 전략 요약 (입찰 근거 및 전략 설명) |
+
+EX)
+
+| **id** | **timestamp** | entity_id | **bid_quantity_kwh** | **bid_price_per_kwh** | **llm_reasoning** |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 2025-07-15 13:00 | 1 | 100 | 120 | 태양광 발전량 예측치가 높아 입찰 |
+| 2 | 2025-07-15 13:00 | 2 | 50 | 130 | 배터리 SOC 충분, 시장가 상승 예측 |
+| 3 | 2025-07-15 13:00 | 3 | 80 | 125 | 풍력 발전량 증가 예상 |
+|  |  |  |  |  |  |
+|  |  |  |  |  |  |
+|  |  |  |  |  |  |
+
+### 3. `bidding_result` – 입찰 수락/거절 + 행동 기록 [알고리즘 → API → 아두이노]
+
+| **칼럼명** | **타입** | **설명** |
+| --- | --- | --- |
+| id | INT | 기본키, 자동 증가 |
+| bid_id | INT(FK) | 해당 입찰 건 (bidding_log.id 참조) |
+| entity_id | INT | 자원(태양광, 풍력 등) 식별자 |
+| quantity_kwh | FLOAT | 해당 자원의 입찰 전력량 (kWh) |
+| bid_price | FLOAT | 해당 자원의 입찰가 (원/kWh) |
+| result | ENUM | 'accepted' 또는 'rejected' (입찰 결과) |
+
+EX) 입찰 결과 나올 때마다 3행씩 update
+
+| **id** | **bid_id** | **entity_id** | **quantity_kwh** | **bid_price** | **result** |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 1 | 0.35 | 124 | rejected |
+| 2 | 1 | 2 | 0.30 | 123 | accepted |
+| 3 | 1 | 3 | 0.20 | 122 | accepted |
+| 4 | 2 | 1 | null | null | null |
+| 5 | 2 | 2 | 0.5 | 140 | rejected  |
+| 6 | 2 | 3 | null | null | null |
+
+### 입찰 제안 시 프롬프트에 들어갈 재료 테이블 (node_status_log와 함께 아래 테이블이 LLM 프롬프트에 들어감)
+
+### 4. `weather` – 날씨 데이터 [SQL→ LLM]
+
+| **칼럼명** | **설명** |
+| --- | --- |
+| obs_time | 관측 또는 예측 기준시간 (YYYY-MM-DD HH:00:00) |
+| temperature_c | 기온 (°C) |
+| rainfall_mm | 강수량 (mm) |
+| humidity_pct | 습도 (%) |
+| cloud_cover_okta | 운량 (0~10 점) |
+| solar_irradiance | 일사량 (MJ/m² 또는 W/m², 단위 일관성주요!) |
+| wind_speed | 풍속 (m/s) |
+
+예시)
+
+| **obs_time** | **temperature_c** | **rainfall_mm** | **humidity_pct** | **cloud_cover_okta** | **solar_irradiance** | wind_speed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2024-05-31 00:00 | 19.0 | 1.2 | 81 | 10 | 446 | 3.1 |
+| 2024-05-31 01:00 | 18.7 | 0.9 | 85 | 10 | 446 | 2.8 |
+| 2024-05-31 02:00 | 18.5 | 0.3 | 81 | 10 | 446 | 2.5 |
+| 2024-05-31 03:00 | 18.2 | 0 | 83 | 10 | 446 | 2.1 |
+
+### 5. `smp` –smp 시간별 데이터 [SQL→ LLM & LLM → 백엔드 ]
+
+| **칼럼명** | **설명** |
+| --- | --- |
+| smp_time | 적용 시각 (YYYY-MM-DD HH:00:00) |
+| price_krw | 해당 시각의 SMP 값 (원/kWh) |
+
+예시) 제주 24년도 5월 31일 csv 참조
+
+| **smp_time** | **price_krw** |
+| --- | --- |
+| 2024-05-31 00:00 | 128.2 |
+| 2024-05-31 01:00 | 127.6 |
+| 2024-05-31 02:00 | 122.9 |
+| 2024-05-31 03:00 | 118.0 |
+
+### 6. `profit_log` – 수익 로그 (20초마다 업데이트 - node_status_log 업데이트 시간에 맞춤)
+
+| **럼명** | **타입** | **설명** |
+| --- | --- | --- |
+| id | INT (PK) | 고유번호 |
+| profit_timestamp | DATETIME | 정산 시간 (=실시간 거래 시각) |
+| entity_id | INT (FK) | 설비(발전소/배터리) ID |
+| unit_price | FLOAT | 거래 단가 (원/kWh) |
+| revenue_krw | FLOAT | 실현 수익(=현재 발전량×unit_priceX 20초) 20초마다 발생하는 수익 |
+
+# REST API 설계
+
+![rest api 구조.png](vpp/readme 자료/rest_api_구조.png)
 
 ### 1. 프론트 ↔ 서버
 
@@ -33,591 +221,16 @@ user의 input을 읽어와서 수정 or 최종 진행 입찰을 server로 보내
 | 발전소 결과 전송 | `GET/serv_fr/node_status` | DB에서 각 발전소별 실시간 발전량 데이터 반환 (프론트 그래프 용) |
 | 수익 결과 전송 | `GET/serv_fr/profit` | DB에서 계산된 총발전량과 수익 정보 반환 (프론트 수익표 용) |
 
-### 입찰 전략 확인 GET/serv_fr/generate_bid
-
-- 엔드포인트 : GET/serv_fr/generate_bid
-- llm이 테이블 업데이트 → 서버가 업데이트된 테이블을 프론트로.
-- 목적 : 서버가 자동 생성한 입찰 데이터를 프론트에 보여줌
-    - Response
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | fail_reason | string/null | 실패 사유/null |
-        | bids | array | 입찰 항목 배열/null |
-        | ㄴentity_id | int | 발전소 id(태양광 등) |
-        | ㄴbid_time  | string | 입찰 시각 |
-        | ㄴbid_price_per_kwh | float | llm 입찰 제안 가격 (원/kWh) |
-        | ㄴbid_quantity_kwh | float | llm 입찰 제안 전력량 (kWh) |
-        | ㄴllm_reasoning | string | llm 전략 요약 |
-        - 성공 시
-            
-            ```json
-            {
-            	"fail_reason": null,
-              "bids": [
-                {
-            	    "entity_id": 1
-                  "bid_time": "2025-07-22 14:30:00 ",  // 입찰 시각
-                  "bid_price_per_kwh": 52.0,                   // 입찰가 (원/kWh)
-                  "bid_quantity_kwh": 5.0                  // 입찰 전력량 (kWh)
-                  "llm_reasoning": "태양광 예측량이 높아 입찰 제안"
-                },
-                ...
-              ]
-            }
-            ```
-            
-        - 실패 시
-            
-            ```json
-            {
-            	"fail_reason": "No LLM output: Failed to generate bidding strategy",
-              "bids": null
-            }
-            ```
-            
-            - 실패 사유
-            
-            | 상황 | 예시 메시지 (fail_reason) |
-            | --- | --- |
-            | LLM 결과 없음 | "No LLM output: Failed to generate bidding strategy" |
-            | 내부 에러 | "Internal server error during bid generation" |
-
-### 사용자 응답 처리 및 최종 입찰 확정 PUT/fr_serv/bid_edit_fix
-
-- 엔드포인트 : PUT/fr_serv/bid_edit_fix
-- 목적 : 사용자의 입찰 수락/수정/응답 없음에 따라 서버에 전달
-    - Request Body
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | action | enum | edit, confirm, timeout |
-        | bid | array | 수정된 입찰 정보 (price, quantity) |
-        | └ entity_name | enum | 태양광, 풍력, 배터리 |
-        | └ bid_price_per_kwh | float | 사용자 제안 입찰 가격 (원/kWh) |
-        
-        ```json
-        {
-          "action": "edit",                    // "edit" | "confirm" | "timeout"
-          "bid": {
-        	  "entity_name" : "태양광",
-            "bid_price_per_kwh": 55.0                    // 수정된 가격
-          }
-        }
-        ```
-        
-        - action
-            - edit : 사용자가 값을 수정하고 제출
-            - confirm : 서버 제안값 그대로 사용
-            - timeout : 사용자 반응 없음 → 서버가 자동 진행
-    - Response
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | status | enum | “Success” or “failed” |
-        | action | enum | edit, confirm, timeout, server |
-        | fail_reason | string | 실패 사유/null |
-        - 성공 시
-            
-            ```json
-            { 
-            	"status": "Success",
-            	"action" : "edit",
-            	"fail_reason" : null
-            }
-            ```
-            
-        - 실패 시
-            
-            ```json
-            { 
-            	"status": "failed",
-            	"action" : "edit",
-            	"fail_reason" : "Missing bid data: Price or entity not provided"
-            }
-            ```
-            
-            - 실패 사유
-                
-                
-                | 액션 타입 | 상황 (한글) | 예시 메시지 (fail_reason, 영어) |
-                | --- | --- | --- |
-                | edit | 수정 데이터 누락 | Missing bid data: Price or entity not provided |
-                | edit | 허용되지 않은 entity | Invalid entity: Must be one of ['태양광', '풍력', '배터리'] |
-                | edit | DB 저장 실패 | Failed to save user edit: Database error |
-                | confirm | 기존 입찰 데이터 없음 | Cannot confirm: No existing bid data found |
-                | confirm | DB 업데이트 실패 | Confirmation failed: Unable to update bidding record |
-                | timeout | LLM 입찰 제안 미존재 | Timeout fallback failed: No auto-generated bid found |
-                | timeout | DB 쓰기 실패 | Timeout processing failed: Could not write default bid |
-                | server | 내부 서버 오류 | Internal server error while processing user response |
-
-### 입찰 결과 확인 GET/serv_fr/bidding_result
-
-- 엔드포인트 : GET/serv_fr/bidding_result
-- 목적: 입찰 결과 시각화 (입찰 성공 여부, 체결 가격, 수량)
-    - Response
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | status | string | 입찰 결과 잘 조회했는지 여부 “success”, “failed” |
-        | bid | array | 입찰 결과 배열 |
-        | └ entity_id | int(FK) | 설비(발전소/배터리) ID |
-        | └ bid_result | enum | 'accepted' 또는 'rejected' |
-        | └ unit_price | float | 체결 가격 |
-        | fail_reason | string | 입찰 결과 실패 이유/null |
-        - 성공 시
-            
-            ```json
-            {
-            	"status" : "success",
-            	"bid" : {
-            	"entity_id" : 3
-              "bid_result": "rejected",            // 'accepted' 또는 'rejected'
-              "unit_price": 53.2              // 체결된 거래 가격
-              },
-              "fail_reason": null
-            }
-            ```
-            
-        - 실패 시
-            - 실패 코드
-                
-                
-                | 실패 사유 코드 | 설명 |
-                | --- | --- |
-                | missing_field:<field> | 필수 필드 누락 |
-                | server_error | 서버 내부 문제 |
-                
-                ```json
-                {
-                	"status" : "success",
-                	"bid" : null,
-                  "fail_reason": <실패 원인>
-                }
-                ```
-                
-
-### 발전소 결과 요청 GET/serv_fr/node_status
-
-- 엔드포인트 : GET/serv_fr/node_status
-- 단위 시간: 20초
-- 목적: DB에서 각 발전소별 실시간 발전량 데이터 반환 (프론트 그래프 용)
-    - Response
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | `status` | string | "success", “failed” |
-        | `data` | object | 설비 유형별 상태 데이터 |
-        | └ `solar` | array | 태양광 설비의 상태 리스트 |
-        | └ `wind` | array | 풍력 설비의 상태 리스트 |
-        | └ `battery` | array | 배터리 상태 리스트 |
-        | 각 설비 내부 필드 |  |  |
-        | └ `relay_id` | int | 설비 ID (`node_status_log.relay_id`) |
-        | └ `power_kw` | float | 실시간 전력량 |
-        | └ `soc` | float/null | 충전 상태(%) – 배터리만 값 존재 |
-        | `timestamp` | datetime | 측정 시각 (`node_timestamp`) |
-        | `fail_reason` | null | 실패 사유 (없음) |
-        - 성공 시
-            
-            ```json
-            {
-              "status": "success",
-              "data": {
-                "solar": [
-                  { "relay_id": 1, "power_kw": 0.45, "soc": null },
-                  { "relay_id": 4, "power_kw": 0, "soc": null }
-                ],
-                "wind": [
-                  { "relay_id": 2, "power_kw": 0, "soc": null },
-                  { "relay_id": 5, "power_kw": 0.15, "soc": null }
-                ],
-                "battery": [
-                  { "relay_id": 3, "power_kw": 0.2, "soc": 68.2 },
-                ]
-              },
-              "timestamp": "2025-07-23T13:45:00",
-              "fail_reason": null
-            }
-            
-            ```
-            
-        - 실패 시
-            - 실패 코드
-                
-                
-                | 실패 사유 코드 | 설명 |
-                | --- | --- |
-                | no_data_available | 최근 기준 node_status_log 데이터가 없음 |
-                | server_error | 서버 내부 문제 |
-                
-                ```json
-                {
-                  "status": "failed",
-                  "data": null,
-                  "timestamp": null,
-                  "fail_reason": 실패 이유
-                }
-                ```
-                
-
-### 수익 결과 요청 GET/serv_fr/profit
-
-- 엔드포인트 : GET/serv_fr/profit
-- 단위 시간: 15분 단위
-- 목적: DB에서 계산된 총발전량과 수익 정보 반환 (프론트 수익표 용)
-    - Response
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | `status` | string | "success" 또는 "failed" |
-        | `data` | array | 누적 총 수익, 총 발전량 배열 |
-        | `data.total_revenue_krw` | float | 누적 수익 (원) – `profit_log` 기준 |
-        | `data.total_generation_kwh` | float | 누적 발전량 (kWh) – `node_status_log` 기준 |
-        | `fail_reason` | string/null | 실패 사유 (예: 파라미터 누락, DB 오류 등) |
-        - 성공 시
-            
-            ```json
-            {
-              "status": "success",
-              "data": {
-                "total_revenue_krw": 12485.6,      // 누적 총 수익 (원)
-                "total_generation_kwh": 122.35     // 누적 총 발전량 (kWh)
-              },
-              "fail_reason": null
-            }
-            ```
-            
-        - 실패 시
-            - 실패 코드
-                
-                
-                | 실패 사유 코드 | 설명 |
-                | --- | --- |
-                | missing_field:<field> | 필수 필드 누락 |
-                | server_error | 서버 내부 문제 |
-                
-                ```json
-                {
-                  "status": "failed",
-                  "data": null,
-                  "timestamp": null,
-                  "fail_reason": "missing_parameter:from"
-                }
-                ```
-                
-        - 내부 로직 계산 예시
-            - 누적 발전량
-            
-            ```sql
-            SELECT SUM(power_kw * (20.0 / 3600))
-            FROM node_status_log
-            WHERE relay_id IN (1,2,4,5)
-            AND node_timestamp BETWEEN {from} AND {to}
-            ```
-            
-            - 누적 수익
-            
-            ```sql
-            SELECT SUM(revenue_krw)
-            FROM profit_log
-            WHERE profit_timestamp BETWEEN {from} AND {to}
-            ```
-            
-
 ### 2. LLM ↔ 서버
 
-### 입찰 전략 기록 POST /llm_serv/generate_bid
+| 목적 | 메소드/엔드포인트 | 설명 |
+| --- | --- | --- |
+| LLM이 출력한 입찰 전략을 서버에 전달 | `POST /llm_serv/generate_bid` |  bidding_log테이블에 3행(태양광, 풍력,배터리) 입찰을 한번에 저장 |
+| 자원 상태 전체를 LLM에 제공 | `GET /llm_serv/node_status` | 입찰 전략 생성을 위한 태양광, 풍력, 배터리 자원 상태 전체를 LLM에 제공 |
+| 입찰 전략 수립을 위한 최근 SMP(시장가격) 데이터 조회 | `GET /llm_serv/get_smp` |  |
+|  기상 관측 데이터 반환 | `GET /llm_serv/get_weather` |  |
 
-- endpoint : `POST /llm_serv/generate_bid`
-- 타이밍 : AI로 전량 생성이 완료 되었을 때
-- 목적 : LLM이 출력한 입찰 전략을 서버에 전달하여 bidding_log테이블에 3행(태양광, 풍력,배터리)를 한번에 저장
-    - Request Body (JSON)
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | bid_time | string | 입찰 적용 시간 (예: “2025-07-22T11:15:00”) |
-        | bid_id | int | 동일 시간대 전략 묶음 식별자 |
-        | bids | array | 자원별 입찰 전략 목록 (총 3개: 태양광/풍력/배터리) |
-        | ㄴresource_type | string | `"태양광"`, `"풍력"`, `"배터리"` 중 하나 |
-        | ㄴentity_id | int | 해당 자원에 연결된 설비 ID |
-        | ㄴbid_quantity_kwh | float / null | 입찰 용량 (kW 단위)
-        * “입찰 비권장” 인 경우 null |
-        | ㄴbid_price_per_kwh | float / null | 입찰 가격 (원/kWh)
-        * “입찰 비권장” 인 경우 null |
-        | ㄴrecommendation | string | 입찰 권장 여부 (예: “입찰권장”, “입찰비권장”) |
-        | ㄴllm_reasoning | string | 판단 근거 요약 (예: “SMP 상승 + SOC 여유”) |
-        
-        ```python
-        {
-          "bid_time": "2025-07-22T11:15:00",
-          "bid_id": 27,
-          "bids": [
-            {
-              "resource_type": "태양광",
-              "entity_id": 1,
-              "bid_quantity_kwh": 0.38,
-              "bid_price_per_kwh": 124,
-              "recommendation": "입찰 권장",
-              "llm_reasoning": "일사량이 높고 SMP가 상승세이므로 수익성 확보 가능"
-            },
-            {
-              "resource_type": "풍력",
-              "entity_id": 2,
-              "bid_quantity_kwh": 0.35,
-              "bid_price_per_kwh": 123,
-              "recommendation": "입찰 권장",
-              "llm_reasoning": "풍속이 안정적이며 현재 SMP 수준에서 수익 기대"
-            },
-            {
-              "resource_type": "배터리",
-              "entity_id": 3,
-              "bid_quantity_kwh": null,
-              "bid_price_per_kwh": null,
-              "recommendation": "입찰 비권장",
-              "llm_reasoning": "SOC가 낮아 방전 불가"
-            }
-          ]
-        }
-        
-        ```
-        
-    - Response Body
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | result | string | “Success” or “Failed” |
-        | message | string | 처리 메세지 (성공 시) |
-        | reason | string | 실패 원인 (실패 시) |
-        - 성공 시
-            
-            ```python
-            {
-            "result": "Success",
-            "message": "입찰 전략 저장 완료"
-            }
-            ```
-            
-        - 실패 시
-            
-            
-            | **코드** | **설명** | **예시 응답 (`reason`)** |
-            | --- | --- | --- |
-            | `missing_field:<field>` | 필수 필드 누락 | `"missing_field:bid_time"` |
-            | `invalid_format:<field>` | 필드 포맷 불일치 (예: 날짜 형식, 리스트 아님) | `"invalid_format:bid_time (must be ISO 8601)"` |
-            | `invalid_type:<field>` | 잘못된 타입 (예: float이어야 하는데 string 등) | `"invalid_type:bid_quantity_kwh (must be float or null)"` |
-            | `empty_bid_list` | 입찰 리스트가 빈 배열이거나 빈 필드가  있은 | `"empty_bid_list"` |
-            | `sql_insert_error` | DB insert 실패 (예: FK 오류, null 삽입 불가 등) | `"sql_insert_error: foreign key constraint fails"` |
-            | `db_connection_error` | DB 연결 문제 | `"db_connection_error"` |
-            | `internal_server_error` | 알 수 없는 서버 내부 오류 | `"internal_server_error"` |
-            
-            ```python
-            {
-              "result": "Failed",
-              "reason":"missing field:bid_time"
-            }
-            ```
-            
-
-### 현재 발전량 요청 GET /llm_serv/node_status
-
-- endpoint : `GET /llm_serv/node_status`
-- 타이밍 : 입찰 전량 생성 전 15분 단위로
-- 목적 : 입찰 전략 생성을 위한 태양광, 풍력, 배터리 자원 상태 전체를 LLM에 제공
-    - Request Boby (JSON)
-        - 없음
-        - 서버는 내부적으로 `node_status_log`에서 자원별로 최신 측정값을 조회함
-        - `relay_id` 기준 자원 매핑
-            
-            
-            | relay_id | 자원 유형 |
-            | --- | --- |
-            | 1, 4 | 태양광 |
-            | 2, 5 | 풍력 |
-            | 3 | 배터리 |
-    - Response Body
-        
-        
-        | **필드명** | **타입** | **설명** |
-        | --- | --- | --- |
-        | result | string | 성공 실패 여부 |
-        | `timestamp` | string | 전체 데이터의 기준 시각 (예: `"2025-07-23T11:00:00"`) |
-        | `resources` | array | 각 자원의 상태 정보 리스트 |
-        | └ `type` | string | 자원 종류: `"태양광"` / `"풍력"` / `"배터리"` |
-        | └ power`_kw` | float | 현재 발전량 또는 방전량 (kW 단위) |
-        | └ `status` | string | 자원 상태 설명 (`"방전 가능"`, `“방전 불가능”` `"SOC 낮음"`, `“SOC 높음”`  ) |
-        | └ `solar_irradiance` | int | **[태양광 전용]** 일사량 (W/m²) |
-        | └ `wind_speed` | float | **[풍력 전용]** 풍속 (m/s) |
-        | └ `soc` | float | **[배터리 전용]** 충전 상태 (State of Charge, %) |
-        - 성공 시
-            
-            ```python
-            {
-            	"result": "sucess",
-              "timestamp": "2025-07-23T11:00:00",
-              "resources": [
-                {
-                  "type": "태양광",
-                  "power_kw": 0.38,
-                  "solar_irradiance": 690,
-                  "status": "정상"
-                },
-                {
-                  "type": "풍력",
-                  "power_kw": 0.36,
-                  "wind_speed": 3.8,
-                  "status": "정상"
-                },
-                {
-                  "type": "배터리",
-                  "power_kw": 0.15,
-                  "soc": 67,
-                  "status": "방전 가능"
-                }
-              ]
-              }
-            
-            ```
-            
-        - 실패 시
-            
-            
-            | 실패 사유 코드 | 원인 설명 |  |
-            | --- | --- | --- |
-            | `no_data` | 자원 데이터가 전혀 없음 |  |
-            | `db_error` | DB 연결 또는 쿼리 오류 |  |
-            | `partial_missing` | 일부 자원 데이터 누락
-            missing_fields에 누락된 필드명 | "missing_fields": ["solar_irradiance", "soc"] |
-            
-            ```json
-            { "result": "Failed", 
-            	"partial_missing":{
-            		"missing_fields": ["solar_irradiance", "soc"]
-            	}
-            }
-            
-            ```
-            
-
-### SMP 데이터 요청 GET /llm_serv/get_smp
-
-- endpoint : `GET /llm_serv/get_smp`
-- 타이밍 : LLM이 전략 판단을 위해 시장 데이터를 파악할 때, 15분 단위로
-- 목적 : 입찰 전략 수립을 위한 최근 SMP(시장가격) 데이터 조회
-    - Request Body
-        - 없음
-        - 내부적으로 최근 4일치 SMP 평균 단가 또는 15분 단위 데이터 조회
-        - timestamp에 따라 최근 4일치 같은 시점의 smp
-    - Response Body
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | timestamp | sting | 기준 시간 (예: 가장 최근 데이터 시각)
-        현재 시간 - 15분, 현재 시간, 현재 시간 + 15분, 현재 시간 +30분 |
-        | smp_data | object | 날짜별 SMP 배열 (`YYYY-MM-DD`: [단가1, 단가2, ...]) |
-        - 성공 시
-            
-            ```python
-            {
-              "timestamp": "2025-07-23T11:00:00",
-              "smp_data": {
-                "2025-07-20": [109.3, 110.1, 111.4, 112.0],
-                "2025-07-21": [112.2, 113.5, 113.0, 111.8],
-                "2025-07-22": [114.1, 115.6, 115.3, 113.9],
-                "2025-07-23": [116.5, 117.0, 117.8, 118.2]
-              }
-            }
-            ```
-            
-        - 실패 시
-            
-            
-            | 실패 사유 코드 | 원인 | 예시 응답 메세지 |
-            | --- | --- | --- |
-            | no_data | 데이터 없음 | SMP data unvailable for requested period |
-            | no_db_connection | DB 연결 오류 | Internal sever error during SMP data fetch |
-            | invalid_format | 형식 오류 또는 파싱 실패 | Invalid SMP format in database |
-            
-            ```python
-            {
-              "result": "failed",
-              "reason": "invalid_format"
-            }
-            ```
-            
-
-### 날씨 데이터 요청 GET/llm_serv/get_weather
-
-- endpoint : `GET /llm_serv/get_weather`
-- 타이밍 : LLM이 전략 판단을 위해 시장 데이터를 파악할 때
-- **목적**: 입찰 시점(15분 단위) 기준으로 해당하는 1시간 단위 기상 관측 데이터 반환
-- **설명**:
-    - 기상 관측 데이터는 1시간 단위(`obs_time`)로 기록됨
-    - 입찰은 15분 단위로 발생하므로, 요청 시점과 가장 가까운 1시간 단위 데이터를 조회하여 반환
-    - AI 프롬프트 내 부가정보 생성에 활용
-- Request Body
-    - 입찰 시점을 요청
-    
-    | 필드명 | 타입 | 필수 여부 | 설명 |
-    | --- | --- | --- | --- |
-    | time | string | 필수 | 입찰 시점(ISO 8601 형식, 15분 단위 권장) |
-    
-    ```sql
-    GET /llm_serv/weather?time=2025-07-22T11:15:00
-    ```
-    
-- Response Body
-    
-    
-    | 필드명 | 타입 | 설명 |
-    | --- | --- | --- |
-    | obs_time | string | 조회된 기상 데이터의 관측 시각 (1시간 단위) |
-    | temperature_c | float | 기온 (섭씨 °C) |
-    | rainfall_mm | float | 강수량 (mm) |
-    | humidity_pct | int | 습도 (%) |
-    | cloud_cover_okta | int | 구름 양 (okta 단위, 0~8) |
-    | solar_irradiance | int | 일사량 (W/m²) |
-    | wind_speed | float | 풍속 (m/s) |
-    - 성공시
-    
-    ```json
-    {
-      "obs_time": "2025-07-22T11:00:00",
-      "temperature_c": 25.3,
-      "rainfall_mm": 0.0,
-      "humidity_pct": 60,
-      "cloud_cover_okta": 2,
-      "solar_irradiance": 710,
-      "wind_speed": 3.8
-    }
-    ```
-    
-    - 실패시
-        
-        
-        | 실패 사유 코드 | 원인 | 예시 응답 메시지 |
-        | --- | --- | --- |
-        | `no_data` | 요청 시간대에 해당하는 기상 데이터 없음 | `No weather data available for requested time` |
-        | `db_error` | DB 조회 중 내부 오류 발생 | `Internal server error during weather data fetch` |
-        | `invalid_format` | 데이터 형식 오류 또는 파싱 실패 | `Invalid weather data format in database` |
-        
-        ```json
-        {
-          "result": "Failed",
-          "reason": "No weather data available for requested time"
-        }
-        ```
-        
-
-## 아두이노 ↔ 서버
+### 3. 아두이노 ↔ 서버
 
 | API 영역 | 목적 | 메소드/엔드포인트 | 설명 |
 | --- | --- | --- | --- |
@@ -626,123 +239,307 @@ user의 input을 읽어와서 수정 or 최종 진행 입찰을 server로 보내
 | **서버 → 아두이노** | 명령 가져오기
 (입찰 수락시) | `GET/serv_ardu/command` | 아두이노가 거래 성공/실패에 따라 릴레이 on/off 변경 |
 
-### 발전소 및 배터리 실시간 상태 전송 POST/ardu_serv/node_status
+# Open API 활용
 
-- 엔드포인트 : POST/ardu_serv/node_status
-- 주기 : 20초마다
-- 목적 : 현재 발전 상태 및 배터리 정보 전송(서버는 이 데이터를 분석/기록/입찰 전략 반영 등에 사용)
-    - Request Body(JSON)
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | relay_id | int | 장치 고유 식별자 |
-        | node_timestamp | string | 상태 전송 시각 (예: `"YYYY-MM-DD HH:MM:SS"`) |
-        | power_kw | float | 현재 발전/소비 전력(kW) |
-        | soc | float\null | 배터리 잔량(%). 배터리일 경우만 입력. 나머지는 null |
-        
-        ```json
-        {
-          "relay_id": 1, // 태양-부하
-          "node_timestamp": "2025-07-22 14:31:00",
-          "power_kw": 0.1205,
-          "soc": null
-        }
-        
-        ```
-        
-        ```json
-        {
-          "relay_id": 5, // 풍력-배터리
-          "node_timestamp": "2025-07-22 14:31:00",
-          "power_kw": 0.1205,
-          "soc": 83.2
-        }
-        
-        ```
-        
-    - Response
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | result | enum | “Success” or “failed” |
-        | node_timestamp | int | 저장된 시간(성공 시) |
-        | reason | string | 실패 원인(실패 시) |
-        - 성공
-            
-            ```json
-            { "result": "Success", 
-            	"node_timestamp": "2025-07-22 14:31:00",
-            	"reason" : null
-            }
-            ```
-            
-        - 실패
-            
-            
-            | 원인 | 예시 응답 |
-            | --- | --- |
-            | 필수 필드 누락 | Missing required field: power_kw |
-            | 잘못된 데이터 타입 | Invalid type: soc must be float or null |
-            | 서버 내부 오류 | Internal server error while saving node status |
-            
-            ```json
-            { "result": "failed",
-            	"node_timestamp" : "2025-07-22 14:31:00",
-              "reason": "<실패 원인>" 
-            }
-            ```
-            
+## Step1. 자원별 실시간 상태요약
 
-### 릴레이 명령 전송 GET/serv_ardu/command
+- 코드
+    
+    ```python
+    import json
+    import requests
+    from langchain.prompts import ChatPromptTemplate
+    from langchain.chat_models import ChatOpenAI
+    from langchain.chains import LLMChain
+    
+    # ✅ OpenAI 설정
+    openai_api_key = "sk-..."  # 🔐 본인의 OpenAI API 키로 교체
+    llm = ChatOpenAI(model="gpt-4o", temperature=0.2, openai_api_key=openai_api_key)
+    
+    # ✅ 자원 상태를 API에서 불러오기
+    def fetch_resource_data_from_api():
+        try:
+            url = "http://your-server-address/api/node_status/latest"  
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+    
+            # 간결한 리스트 컴프리헨션 방식으로 프롬프트 입력 변환
+            return "\n".join(
+                f"{item['name']}, {item['power_kw']}, {item['info']}, {item['status']}"
+                for item in data
+            )
+    
+        except Exception as e:
+            print("❌ API 호출 실패:", e)
+            return None  # 실패 시 None 반환
+    
+    # ✅ 프롬프트 템플릿 정의
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "너는 VPP 에너지 입찰 어시스턴트야.\n아래 자원 상태 데이터를 바탕으로 JSON 형식 결과와 요약문을 만들어줘.\nJSON은 다음 키를 포함해야 해: 자원, 발전량(kW), 부가정보, status"),
+        ("human", "자원 상태 데이터:\n\n{resource_data}")
+    ])
+    
+    # ✅ LangChain 체인 생성
+    status_chain = LLMChain(llm=llm, prompt=prompt)
+    
+    # ✅ API 호출 → LangChain 입력값 구성
+    resource_data = fetch_resource_data_from_api()
+    
+    if resource_data is None:
+        print("❌ 자원 상태 데이터를 불러오지 못해 종료합니다.")
+        exit(1)
+    
+    resource_input = {
+        "resource_data": resource_data
+    }
+    
+    # ✅ 체인 실행
+    response = status_chain.invoke(resource_input)
+    gpt_output = response["text"]
+    
+    # ✅ 결과 파싱 및 출력
+    try:
+        json_part = gpt_output.split("📄")[0].replace("📦 JSON:", "").strip()
+        summary_part = gpt_output.split("📄 요약문:")[1].strip()
+    
+        print("📦 JSON 결과")
+        parsed_json = json.loads(json_part)
+        print(json.dumps(parsed_json, indent=2, ensure_ascii=False))
+    
+        print("\n📄 요약문")
+        print(summary_part)
+    
+    except Exception as e:
+        print("[❌ 파싱 오류 발생]")
+        print(str(e))
+        print("GPT 원본 출력:\n", gpt_output)
+    \
+    ```
+    
+- 출력예시
+    
+    ```json
+    📦 JSON:
+    [
+      {
+        "자원": "태양광",
+        "발전량(kW)": 0.42,
+        "부가정보": "일사량 710W/m² (맑음)",
+        "status": "정상"
+      },
+      {
+        "자원": "풍력",
+        "발전량(kW)": 0.36,
+        "부가정보": "풍속 3.8m/s (약간 감소)",
+        "status": "정상"
+      },
+      {
+        "자원": "배터리",
+        "발전량(kW)": 0.18,
+        "부가정보": "SOC 75%, 충전 중",
+        "status": "방전 가능"
+      },
+      {
+      "온도": 25.3,
+      "강수량": 0.0,
+      "습도": 60,
+      "전운량": 2,
+      }
+    ]
+    ```
+    
+    ### 📄 요약문 (프론트 표시용)
+    
+    ```json
+    📄 요약문:
+    모든 자원은 정상 상태이며 발전량도 안정적입니다.  
+    태양광은 일사량이 좋고, 풍력은 약간 감소했지만 여전히 유효한 상태입니다.  
+    배터리는 SOC가 높아 방전 가능 상태입니다.
+    ```
+    
 
-- 엔드포인트 : GET/serv_ardu/command
-- 목적 : 입찰 성공/실패에 따라 릴레이(전력 송출 장치) 제어
-    - Response
-        
-        
-        | 필드명 | 타입 | 설명 |
-        | --- | --- | --- |
-        | status | string | “success” “failed” |
-        | command | array | 제어 명령 항목  |
-        | └ realy_id | int | 장치 고유 식별자 |
-        | └ relay | enum | on, off |
-        | └ reason | enum | “accepted”, “rejected” |
-        | fail_reason | string/null | 명령 실패 시 사유(성공이면 null) |
-        - 성공 시
-            
-            ```json
-            {
-            	"status" : "success",
-            	"command":{
-            	"relay_id": 1, //태양-부하
-              "relay": "on",                         // 또는 "off"
-              "reason": "accepted",
-            	},
-              "fail_reason" : null
-            }
-            ```
-            
-        - 실패 시
-            
-            ```json
-            {
-            	"status" : "failed",
-            	"command": null,
-              "fail_reason" : 실패 사유
-            }
-            ```
-            
-            - 실패 사유
-                
-                
-                | 코드 | 설명 |
-                | --- | --- |
-                | relay not registered | relay_id가 시스템에 등록되지 않음 |
-                | command conflict | 이전 명령이 아직 실행되지 않음 (중복 또는 충돌 방지 목적) |
-                | internal server error | 서버 처리 중 오류 |
-                | relay unavailable | 릴레이가 현재 물리적으로 연결되지 않았거나 통신 불가 |
-                | entity inactive | 해당 엔티티(발전소/배터리)가 비활성 상태 |
+## Step2. 시장 환경 분석
 
-⇒ 아두이노는 이 명령에 따라 릴레이를 켜거나 꺼서 실제 전력을 거래함
+- 코드
+    
+    ```python
+    from langchain.prompts import ChatPromptTemplate
+    from langchain.chat_models import ChatOpenAI
+    from langchain.chains import LLMChain
+    import json
+    
+    # ✅ OpenAI 설정
+    openai_api_key = "sk-..."  # 본인의 키 입력
+    llm = ChatOpenAI(model="gpt-4o", temperature=0.2, openai_api_key=openai_api_key)
+    
+    # ✅ Step 2 프롬프트: 시장 환경 분석
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "너는 VPP 시장 입찰 분석 전문가야."),
+        ("human", """
+    다음은 최근 SMP 시장 정보야:
+    
+    - 2025-07-13: 111.8원
+    - 2025-07-14: 112.9원
+    - 2025-07-15: 117.1원
+    - 2025-07-16: 123.0원 (입찰 예정일)
+    
+    또한, 현재 시간대(11:15~11:30)는 발전량 증가가 예상되는 구간이야.
+    
+    📦 JSON 형식 (시장 분석 정리):
+    {
+      "avg_SMP_4d": 116.2,
+      "today_SMP": 123.0,
+      "trend": "상승",
+      "comment": "SMP가 지속 상승 중이며, 발전량 증가로 경쟁 심화 예상"
+    }
+    
+    📄 요약문:
+    시장 평균 SMP는 116.2원이며, 현재는 123원으로 상승세입니다.  
+    11시대는 발전 여건이 좋아 경쟁이 심화될 것으로 보입니다.
+    """)
+    ])
+    
+    # ✅ LangChain 체인
+    market_chain = LLMChain(llm=llm, prompt=prompt)
+    
+    # ✅ 실행
+    response = market_chain.invoke({})
+    gpt_output = response["text"]
+    
+    # ✅ 결과 분리 및 출력
+    try:
+        json_part = gpt_output.split("📄")[0].replace("📦 JSON 형식 (시장 분석 정리):", "").strip()
+        summary_part = gpt_output.split("📄 요약문:")[1].strip()
+    
+        print("📦 JSON 결과")
+        parsed_json = json.loads(json_part)
+        print(json.dumps(parsed_json, indent=2, ensure_ascii=False))
+    
+        print("\n📄 요약문")
+        print(summary_part)
+    
+    except Exception as e:
+        print("[❌ 파싱 오류 발생]")
+        print(str(e))
+        print("GPT 원본 출력:\n", gpt_output)
+    
+    ```
+    
+- 출력예시
+    
+    ### 📄 JSON (프론트 표시용)
+    
+    ```json
+    {
+      "avg_SMP_4d": 116.2,
+      "today_SMP": 123.0,
+      "trend": "상승",
+      "comment": "SMP가 지속 상승 중이며, 발전량 증가로 경쟁 심화 예상"
+    }
+    ```
+    
+    ### 📄 요약문 (프론트 표시용)
+    
+    ```
+    최근 4일간 SMP 평균은 116.2원이며, 입찰일 SMP는 123.0원으로 상승세입니다.
+    현재 시점은 SMP가 지속적인 가격 상승 흐름이 나타나고 있어, 경쟁 수준은 높음입니다.
+    ```
+    
+
+## Step3. 추천입찰전략
+
+- 코드
+    
+    ```json
+    # ✅ Step 3: 입찰 전략 추천 (JSON + 요약문 분리)
+    bid_prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content="너는 VPP 입찰 전략 전문가야."),
+        HumanMessage(content="""
+    아래 자원 상태와 시장 분석을 바탕으로, 자원별 입찰 전략을 수립해줘.  
+    각 자원에 대해 다음 정보를 아래 순서대로 JSON으로 출력하고, 요약문도 함께 작성해줘.
+    
+    - apply_time: 입찰 적용 시간 (ex. "11:15~11:30")
+    - bid_amount_kw: 입찰 전력량 (비권장일 경우 0.0)
+    - bid_price: 입찰가 (비권장일 경우 null)
+    - recommendation: 입찰 권장 / 입찰 비권장
+    - strategy_reason: 판단 이유 요약
+    
+    📌 자원 상태 요약:
+    - 태양광: 0.38kW, 일사량 690W/m² (맑음), 상태: 정상
+    - 풍력: 0.35kW, 풍속 4.0m/s (점진적 증가), 상태: 정상
+    - 배터리: 0.15kW, SOC 10%, 상태: 충전 중 (방전 불가)
+    
+    📌 시장 분석 요약:
+    - 평균 SMP (4일): 116.2원
+    - 오늘 SMP: 123.0원 (상승세)
+    - 현재 시간: 11:15~11:30, 발전량 증가 예상
+    
+    📦 JSON 결과:
+    { 각 자원별 입찰 전략 }
+    
+    📄 요약문:
+    { 사용자에게 보여줄 설명 요약 }
+    """)
+    ])
+    bid_chain = bid_prompt | llm
+    
+    # 실행
+    bid_result = bid_chain.invoke({})
+    full_text = bid_result.content
+    
+    # ✅ JSON 파트와 요약문 분리
+    json_part = full_text.split("📄 요약문:")[0].split("📦 JSON 결과:")[1].strip()
+    summary_part = full_text.split("📄 요약문:")[1].strip()
+    
+    # ✅ 출력
+    print("\n📦 입찰 전략 JSON:")
+    print(json_part)
+    
+    print("\n📄 요약문 (프론트 표시용):")
+    print(summary_part)
+    
+    ```
+    
+- 출력예시
+    
+    ### 📄 JSON (프론트 표시용)
+    
+    ```json
+    📦 JSON 결과:
+    {
+      "태양광": {
+        "apply_time": "11:15~11:30",
+        "bid_amount_kw": 0.38,
+        "bid_price": 124,
+        "recommendation": "입찰 권장",
+        "strategy_reason": "일사량이 높고 SMP가 상승세이므로 수익성 확보 가능"
+      },
+      "풍력": {
+        "apply_time": "11:15~11:30",
+        "bid_amount_kw": 0.35,
+        "bid_price": 123,
+        "recommendation": "입찰 권장",
+        "strategy_reason": "풍속이 안정적이며 현재 SMP 수준에서 수익 기대"
+      },
+      "배터리": {
+        "apply_time": "11:15~11:30",
+        "bid_amount_kw": 0.0,
+        "bid_price": null,
+        "recommendation": "입찰 비권장",
+        "strategy_reason": "SOC가 낮아 방전 불가"
+      }
+    }
+    ```
+    
+    ### 📄 요약문 (프론트 표시용)
+    
+    ```diff
+    
+    📄 요약문:
+    태양광과 풍력은 현재 환경에서 입찰이 권장됩니다.  
+    특히 SMP가 상승세이고 일사량 및 풍속 조건이 안정적이어서 기대 수익이 높습니다.  
+    반면, 배터리는 SOC 부족으로 인해 방전이 어려워 입찰이 비권장됩니다.
+    
+    ```
+    

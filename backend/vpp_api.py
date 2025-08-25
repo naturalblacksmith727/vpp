@@ -1,7 +1,7 @@
 import traceback  # 파일 상단에 추가
 from flask import Flask, request, jsonify, Blueprint
 from datetime import datetime, timedelta
-import pytz
+import pytz, time
 import pymysql
 import json
 from flask_cors import CORS
@@ -80,12 +80,13 @@ class ActionEnum(str, Enum):
     CONFIRM = "confirm"
     TIMEOUT = "timeout"
 
+
 # 타임 아웃 체크 함수(한국시간 기준 15분마다 14분  지났는지 확인)
+kst = pytz.timezone("Asia/Seoul")
 
 
 def is_timeout():
-    korea = pytz.timezone("Asia/Seoul")
-    now = datetime.now(korea)
+    now = datetime.now(kst)
     minute = (now.minute // 15) * 15
     start_time = now.replace(minute=minute, second=0, microsecond=0)
     timeout_time = start_time + timedelta(minutes=14)
@@ -94,9 +95,8 @@ def is_timeout():
 
 
 # 가장 가까운 15분 단위로 반올림
-def round_to_nearest_15min(dt: datetime = None):
-    if dt is None:
-        dt = datetime.now()
+def round_to_nearest_15min():
+    dt = datetime.now(kst)
     discard = timedelta(minutes=dt.minute % 15,
                         seconds=dt.second,
                         microseconds=dt.microsecond)
@@ -259,7 +259,6 @@ def get_profit_result():
             "fail_reason": "server_error"
         })
 
-
 # 3. GET/generate_bid: 생성한 입찰 보여주기 (서버 -> 프론트)
 @vpp_blueprint.route("/serv_fr/generate_bid", methods=["GET"])
 def get_generate_bid():
@@ -285,7 +284,7 @@ def get_generate_bid():
         result = []
         for bid in bids:
             result.append({
-                "bid_id":bid["bid_id"],
+                "bid_id": bid["bid_id"],
                 "entity_id": bid["entity_id"],
                 "bid_time": bid["bid_time"].strftime("%Y-%m-%d %H:%M:%S"),
                 "bid_price_per_kwh": bid["bid_price_per_kwh"],
@@ -315,8 +314,9 @@ def get_bidding_result():
                 SELECT entity_id, result, bid_price
                 FROM bidding_result
                 WHERE bid_id = (
-            SELECT MAX(bid_id) FROM bidding_result
-        )
+                    SELECT MAX(bid_id) 
+                    FROM bidding_result
+                )
             """
             cursor.execute(sql)
             results = cursor.fetchall()
@@ -341,6 +341,9 @@ def get_bidding_result():
             "bid": None,
             "fail_reason": "server_error"
         })
+
+
+
 
 # 5. PUT/bid_edit_fix: 사용자 응답 처리 및 최종 입찰 확정(프론트엔드->서버)
 @vpp_blueprint.route('/fr_serv/bid_edit_fix', methods=['PUT'])
@@ -538,8 +541,9 @@ def fetch_smp_for_time_blocks(base_time):
 
         for offset in today_offsets:
             dt = base_time + timedelta(minutes=offset)
+            dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
             query = "SELECT price_krw FROM smp WHERE smp_time = %s LIMIT 1"
-            cursor.execute(query, (dt,))
+            cursor.execute(query, (dt_str,))
             result = cursor.fetchone()
             smp_data[base_time_key].append(
                 result["price_krw"] if result else None)
@@ -552,8 +556,9 @@ def fetch_smp_for_time_blocks(base_time):
 
             for offset in [-15, 0, 15, 30]:
                 dt = day_dt + timedelta(minutes=offset)
+                dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
                 query = "SELECT price_krw FROM smp WHERE smp_time = %s LIMIT 1"
-                cursor.execute(query, (dt,))
+                cursor.execute(query, (dt_str,))
                 result = cursor.fetchone()
                 smp_data[key].append(result["price_krw"] if result else None)
 
