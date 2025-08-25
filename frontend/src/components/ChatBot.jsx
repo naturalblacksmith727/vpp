@@ -395,16 +395,19 @@ function ChatBot() {
   }, [messages]);
 
   if (!bidData) {
-    setMessages([
-      {
-        sender: "bot",
-        text: "데이터를 불러오는 중입니다... 잠시만 기다려주세요.",
-        timestamp: new Date().toLocaleTimeString("ko-KR", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      },
-    ]);
+    return (
+      <div className="w-full px-4">
+        <h2 className="mb-6 text-4xl font-bold text-center">챗봇 대화창</h2>
+        <div className="w-full border border-gray-300 p-4 rounded-lg">
+          <div className="h-96 flex items-center justify-center">
+            <LoadingDots />
+            <span className="ml-2">
+              데이터를 불러오는 중입니다... 잠시만 기다려주세요.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
