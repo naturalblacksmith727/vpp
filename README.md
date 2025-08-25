@@ -15,7 +15,7 @@
 
 <2024 6월 14일 SMP>
 
-![image.png](readme 자료/image.png)
+![image.png](https://github.com/naturalblacksmith727/vpp/blob/main/readme%20%EC%9E%90%EB%A3%8C/image.png)
 
 # 솔루션
 
