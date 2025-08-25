@@ -324,8 +324,7 @@ function ChatBot() {
       // 01, 16, 31, 46분만, 중복 방지
       if (
         [1, 16, 31, 46].includes(minutes) &&
-        lastMinuteRef.current !== minutes &&
-        bidDataRef.current
+        lastMinuteRef.current !== minutes
       ) {
         lastMinuteRef.current = minutes;
 
