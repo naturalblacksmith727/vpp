@@ -29,6 +29,12 @@ function ChatBot() {
   const lastMinuteRef = useRef(null); // 시간 확인용
   const timeoutTimerRef = useRef(null); // 타임아웃 타이머
   const awaitingEditInputRef = useRef(false); // "수정하고진행" 상태 확인용
+  const bidDataRef = useRef(bidData); //biddata최신화용
+
+  // bidData가 바뀔 때 항상 Ref 업데이트
+  useEffect(() => {
+    bidDataRef.current = bidData;
+  }, [bidData]);
 
   useEffect(() => {
     const fetchData = () => {
@@ -310,7 +316,7 @@ function ChatBot() {
   // 시간마다 자동 메세지 전송
   useEffect(() => {
     const checkTimeAndSend = async () => {
-      if (!bidData) return; // bidData 없으면 실행하지 않음
+      if (!bidDataRef.current) return; // bidData 없으면 실행하지 않음
 
       const now = new Date();
       const minutes = now.getMinutes();
@@ -319,7 +325,7 @@ function ChatBot() {
       if (
         [1, 16, 31, 46].includes(minutes) &&
         lastMinuteRef.current !== minutes &&
-        bidData
+        bidDataRef.current
       ) {
         lastMinuteRef.current = minutes;
 
@@ -342,7 +348,7 @@ function ChatBot() {
 
         const entityType = { 1: "태양광", 2: "풍력", 3: "배터리" };
 
-        const summary = bidData.bids
+        const summary = bidDataRef.current.bids
           .map((b) => {
             return `[${entityType[b.entity_id]}]\n- 입찰 전력량: ${
               b.bid_quantity_kwh
@@ -391,7 +397,7 @@ function ChatBot() {
     checkTimeAndSend();
 
     return () => clearInterval(interval);
-  }, [bidData]);
+  }, []);
 
   // 채팅창 자동으로 아래로 내리기
   useEffect(() => {
