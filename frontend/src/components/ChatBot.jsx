@@ -310,6 +310,8 @@ function ChatBot() {
   // 시간마다 자동 메세지 전송
   useEffect(() => {
     const checkTimeAndSend = async () => {
+      if (!bidData) return; // bidData 없으면 실행하지 않음
+
       const now = new Date();
       const minutes = now.getMinutes();
 
@@ -384,6 +386,10 @@ function ChatBot() {
     };
 
     const interval = setInterval(checkTimeAndSend, 10000); // 10초마다 체크
+
+    // 페이지 로드 시 즉시 실행
+    checkTimeAndSend();
+
     return () => clearInterval(interval);
   }, [bidData]);
 
