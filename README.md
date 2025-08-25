@@ -36,14 +36,15 @@
 
 # 시스템 구조도
 
-![image.png](readme 자료/image 1.png)
+![image 1.png](https://github.com/naturalblacksmith727/vpp/blob/main/readme%20%EC%9E%90%EB%A3%8C/image%201.png))
 
 - <아두이노 세부 구조>
     
-    ![image.png](readme 자료/image 2.png)
+    ![image 2.png](https://github.com/naturalblacksmith727/vpp/blob/main/readme%20%EC%9E%90%EB%A3%8C/image%202.png)
     
 # 데이터 베이스 
 [데이터 베이스 보기](backend/README.md#데이터베이스)
+![image 3.png](https://github.com/naturalblacksmith727/vpp/blob/main/readme%20%EC%9E%90%EB%A3%8C/image%203.png)
 
 
 # LLM 프롬프트
@@ -51,6 +52,7 @@
 
 # Rest API spec 
 [Rest API Spec 보기](backend/README.md#Rest-API-설계)
+![rest_api_구조.png](https://github.com/naturalblacksmith727/vpp/blob/main/readme%20%EC%9E%90%EB%A3%8C/rest_api_%EA%B5%AC%EC%A1%B0.png)
 
 
 # Task MM
@@ -126,7 +128,7 @@ PM [문지원]
 
 - 풍력 발전 모터 [https://m.robotscience.kr/goods/view?no=20588](https://m.robotscience.kr/goods/view?no=20588)
 
-![image.png](readme 자료/image 4.png)
+![image 4.png](https://github.com/naturalblacksmith727/vpp/blob/main/readme%20%EC%9E%90%EB%A3%8C/image%204.png)
 
 배터리 
 
