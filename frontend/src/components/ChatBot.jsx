@@ -29,6 +29,12 @@ function ChatBot() {
   const lastMinuteRef = useRef(null); // 시간 확인용
   const timeoutTimerRef = useRef(null); // 타임아웃 타이머
   const awaitingEditInputRef = useRef(false); // "수정하고진행" 상태 확인용
+  const bidDataRef = useRef(bidData); //biddata최신화용
+
+  // bidData가 바뀔 때 항상 Ref 업데이트
+  useEffect(() => {
+    bidDataRef.current = bidData;
+  }, [bidData]);
 
   useEffect(() => {
     const fetchData = () => {
@@ -233,6 +239,7 @@ function ChatBot() {
           }
           // 이전 타이머 제거
           if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+          timeoutTimerRef.current = null;
           setIsBiddingActive(false);
 
           const result = await sendBidEditFix("confirm");
@@ -272,6 +279,7 @@ function ChatBot() {
           }
           // 이전 타이머 제거
           if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+          timeoutTimerRef.current = null;
 
           awaitingEditInputRef.current = true;
           setIsBiddingActive(false);
@@ -310,14 +318,27 @@ function ChatBot() {
   // 시간마다 자동 메세지 전송
   useEffect(() => {
     const checkTimeAndSend = async () => {
+      // ---  자동 메시지 전송 전 항상 최신 데이터 fetch ---
+      try {
+        const response = await axios.get(
+          "https://aivpp.duckdns.org/api/serv_fr/generate_bid"
+        );
+        if (response.data.fail_reason === null) {
+          bidDataRef.current = response.data;
+          setBidData(response.data);
+        }
+      } catch (err) {
+        console.error("자동 메시지 최신 데이터 fetch 실패", err);
+        return;
+      }
+
       const now = new Date();
       const minutes = now.getMinutes();
 
       // 01, 16, 31, 46분만, 중복 방지
       if (
         [1, 16, 31, 46].includes(minutes) &&
-        lastMinuteRef.current !== minutes &&
-        bidData
+        lastMinuteRef.current !== minutes
       ) {
         lastMinuteRef.current = minutes;
 
@@ -340,7 +361,7 @@ function ChatBot() {
 
         const entityType = { 1: "태양광", 2: "풍력", 3: "배터리" };
 
-        const summary = bidData.bids
+        const summary = bidDataRef.current.bids
           .map((b) => {
             return `[${entityType[b.entity_id]}]\n- 입찰 전력량: ${
               b.bid_quantity_kwh
@@ -383,9 +404,13 @@ function ChatBot() {
       }
     };
 
-    const interval = setInterval(checkTimeAndSend, 10000); // 10초마다 체크
+    const interval = setInterval(checkTimeAndSend, 30000); // 30초마다 체크
+
+    // 페이지 로드 시 즉시 실행
+    checkTimeAndSend();
+
     return () => clearInterval(interval);
-  }, [bidData]);
+  }, []);
 
   // 채팅창 자동으로 아래로 내리기
   useEffect(() => {
