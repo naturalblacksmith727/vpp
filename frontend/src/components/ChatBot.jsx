@@ -316,7 +316,19 @@ function ChatBot() {
   // 시간마다 자동 메세지 전송
   useEffect(() => {
     const checkTimeAndSend = async () => {
-      if (!bidDataRef.current) return; // bidData 없으면 실행하지 않음
+      // ---  자동 메시지 전송 전 항상 최신 데이터 fetch ---
+      try {
+        const response = await axios.get(
+          "https://aivpp.duckdns.org/api/serv_fr/generate_bid"
+        );
+        if (response.data.fail_reason === null) {
+          bidDataRef.current = response.data;
+          setBidData(response.data);
+        }
+      } catch (err) {
+        console.error("자동 메시지 최신 데이터 fetch 실패", err);
+        return;
+      }
 
       const now = new Date();
       const minutes = now.getMinutes();
@@ -390,7 +402,7 @@ function ChatBot() {
       }
     };
 
-    const interval = setInterval(checkTimeAndSend, 10000); // 10초마다 체크
+    const interval = setInterval(checkTimeAndSend, 30000); // 30초마다 체크
 
     // 페이지 로드 시 즉시 실행
     checkTimeAndSend();
